@@ -41,6 +41,60 @@ enum ManualWarmup {
     }
 }
 
+/// Look-up of what the user did *last time* for an exercise, surfaced as ghost
+/// values beside each set while logging (Strong's signature "previous" column).
+///
+/// Extracted from the view so the two rules — which past session counts, and how
+/// its sets line up with the current ones — are unit-testable against SwiftData
+/// models. Purely read-only: it traverses existing relationships and never
+/// mutates or fetches (ba-oy0.1).
+enum PreviousSession {
+    /// A single set's performed values from a previous session, in canonical
+    /// pounds (the UI converts to the user's unit at the display boundary).
+    struct SetValue: Equatable {
+        let reps: Int
+        /// Weight in canonical pounds — see ``WeightUnit``.
+        let weight: Double
+    }
+
+    /// The working sets `exercise` was last trained with, drawn from its most
+    /// recent *finished* workout other than `current`. Warm-ups are excluded and
+    /// the sets come back in performed order; empty when the exercise has no
+    /// prior finished session.
+    static func lastWorkingSets(
+        for exercise: Exercise,
+        excluding current: WorkoutExercise
+    ) -> [SetEntry] {
+        let mostRecent = exercise.workoutExercises
+            .filter { $0.id != current.id }
+            .compactMap { entry -> (Date, WorkoutExercise)? in
+                guard let finishedAt = entry.workout?.finishedAt else { return nil }
+                return (finishedAt, entry)
+            }
+            .max { $0.0 < $1.0 }?
+            .1
+        return mostRecent?.orderedSets.filter { !$0.isWarmup } ?? []
+    }
+
+    /// Maps each current *working* set to the value performed in the same
+    /// position last session, keyed by set id for the row to look up. Sets beyond
+    /// last session's count — and warm-up rows — are absent, so no ghost shows.
+    static func lastValues(for workoutExercise: WorkoutExercise) -> [UUID: SetValue] {
+        guard let exercise = workoutExercise.exercise else { return [:] }
+        let previous = lastWorkingSets(for: exercise, excluding: workoutExercise)
+        guard !previous.isEmpty else { return [:] }
+
+        var values: [UUID: SetValue] = [:]
+        var index = 0
+        for set in workoutExercise.orderedSets where !set.isWarmup {
+            guard index < previous.count else { break }
+            values[set.id] = SetValue(reps: previous[index].reps, weight: previous[index].weight)
+            index += 1
+        }
+        return values
+    }
+}
+
 /// The active workout-logging surface: the core loop of the app.
 ///
 /// Drives a single in-progress `Workout` — add exercises from the library, log
@@ -448,7 +502,7 @@ private struct ExerciseSection: View {
             .foregroundStyle(.secondary)
 
             ForEach(workoutExercise.orderedSets) { set in
-                SetRow(set: set, onComplete: onComplete)
+                SetRow(set: set, previous: previousValues[set.id], onComplete: onComplete)
             }
             .onDelete(perform: onDeleteSets)
 
@@ -505,6 +559,12 @@ private struct ExerciseSection: View {
         .buttonStyle(.borderless)
         .textCase(nil)
         .accessibilityLabel("Add warm-up sets")
+    }
+
+    /// What the user did last session, keyed by current set id, for the "last
+    /// time" ghost values. Recomputed per render — cheap for realistic set counts.
+    private var previousValues: [UUID: PreviousSession.SetValue] {
+        PreviousSession.lastValues(for: workoutExercise)
     }
 
     /// Weight the warm-up calculator opens on: the heaviest working set, falling
@@ -608,6 +668,9 @@ private struct ExerciseSection: View {
 /// tap-to-complete checkmark.
 private struct SetRow: View {
     @Bindable var set: SetEntry
+    /// What was performed for this set last session, or `nil` when there's no
+    /// prior session to show. Drives the "last time" ghost line.
+    let previous: PreviousSession.SetValue?
     /// Called with this set when it transitions into the completed state.
     let onComplete: (SetEntry) -> Void
 
@@ -618,6 +681,16 @@ private struct SetRow: View {
     @State private var isShowingPlateCalculator = false
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            fields
+            if let previous {
+                previousLabel(previous)
+            }
+        }
+    }
+
+    /// The editable set controls: warm-up flag, reps × weight, RPE, plates, done.
+    private var fields: some View {
         HStack(spacing: 12) {
             Button {
                 set.isWarmup.toggle()
@@ -672,6 +745,18 @@ private struct SetRow: View {
         .sheet(isPresented: $isShowingPlateCalculator) {
             PlateCalculatorView(initialTarget: set.weight)
         }
+    }
+
+    /// The "last time" ghost line: what the user performed for this set in their
+    /// most recent session, as reps × weight in the current unit. Low-emphasis and
+    /// inset past the set-number circle so it reads as a hint beneath the fields.
+    private func previousLabel(_ previous: PreviousSession.SetValue) -> some View {
+        let weight = WeightFormat.weight(previous.weight, in: weightUnit)
+        return Text("Last time: \(previous.reps) × \(weight)")
+            .font(.caption2)
+            .foregroundStyle(.tertiary)
+            .padding(.leading, 38)
+            .accessibilityLabel("Last time \(previous.reps) reps at \(weight)")
     }
 
     /// A titled, right-aligned numeric entry column.
