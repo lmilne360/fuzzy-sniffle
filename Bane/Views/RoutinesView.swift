@@ -79,6 +79,13 @@ struct RoutinesView: View {
             }
         }
         .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                NavigationLink {
+                    ProgramsView()
+                } label: {
+                    Label("Browse Programs", systemImage: "books.vertical")
+                }
+            }
             ToolbarItem(placement: .primaryAction) {
                 Button {
                     activeSheet = .new
