@@ -136,7 +136,7 @@ private struct RoutineRow: View {
         let items = routine.items
         let exerciseCount = items.count
         guard exerciseCount > 0 else { return "No exercises" }
-        let setCount = items.reduce(0) { $0 + $1.targetSets }
+        let setCount = items.reduce(0) { $0 + $1.sets.count }
         let exerciseText = "\(exerciseCount) exercise\(exerciseCount == 1 ? "" : "s")"
         let setText = "\(setCount) set\(setCount == 1 ? "" : "s")"
         return "\(exerciseText) · \(setText)"

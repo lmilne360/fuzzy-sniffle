@@ -12,6 +12,7 @@ enum Persistence {
         Exercise.self,
         Routine.self,
         RoutineItem.self,
+        RoutineSet.self,
         Workout.self,
         WorkoutExercise.self,
         SetEntry.self,

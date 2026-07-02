@@ -29,7 +29,10 @@ struct RoutineEditorView: View {
                 // Drop items whose exercise was deleted out from under us; they
                 // can't be meaningfully edited or re-saved.
                 guard let exercise = item.exercise else { return nil }
-                return DraftItem(exercise: exercise, targetSets: item.targetSets)
+                let sets = item.orderedSets.map {
+                    DraftSet(targetReps: $0.targetReps, targetWeight: $0.targetWeight)
+                }
+                return DraftItem(exercise: exercise, sets: sets)
             }
         )
     }
@@ -100,7 +103,7 @@ struct RoutineEditorView: View {
     }
 
     private func addExercise(_ exercise: Exercise) {
-        items.append(DraftItem(exercise: exercise, targetSets: 3))
+        items.append(DraftItem(exercise: exercise, sets: DraftItem.defaultSets()))
     }
 
     /// Materialize the draft into SwiftData and dismiss.
@@ -122,13 +125,19 @@ struct RoutineEditorView: View {
         }
 
         for (index, draft) in items.enumerated() {
-            let item = RoutineItem(
-                order: index,
-                targetSets: draft.targetSets,
-                exercise: draft.exercise
-            )
+            let item = RoutineItem(order: index, exercise: draft.exercise)
             item.routine = target
             modelContext.insert(item)
+
+            for (setIndex, draftSet) in draft.sets.enumerated() {
+                let set = RoutineSet(
+                    order: setIndex,
+                    targetReps: draftSet.targetReps,
+                    targetWeight: draftSet.targetWeight
+                )
+                set.routineItem = item
+                modelContext.insert(set)
+            }
         }
 
         dismiss()
@@ -141,16 +150,30 @@ struct RoutineEditorView: View {
 private struct DraftItem: Identifiable {
     let id = UUID()
     var exercise: Exercise
-    var targetSets: Int
+    var sets: [DraftSet]
+
+    /// The sets a freshly-added exercise starts with: three working sets seeded
+    /// with a sensible default rep target and no weight yet.
+    static func defaultSets() -> [DraftSet] {
+        (0..<3).map { _ in DraftSet(targetReps: 10, targetWeight: 0) }
+    }
 }
 
-/// One editable exercise row: name/subtitle plus a stepper for the target set
-/// count.
+/// A mutable, in-memory target set. Keeps its own identity so `ForEach` stays
+/// stable as sets are added and removed before saving.
+private struct DraftSet: Identifiable {
+    let id = UUID()
+    var targetReps: Int
+    var targetWeight: Double
+}
+
+/// One editable exercise row: name/subtitle plus a per-set list of target reps
+/// and weight, with controls to add or remove sets.
 private struct DraftItemRow: View {
     @Binding var item: DraftItem
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.exercise.name)
                 Text("\(item.exercise.primaryMuscle.displayName) · \(item.exercise.equipment.displayName)")
@@ -158,14 +181,90 @@ private struct DraftItemRow: View {
                     .foregroundStyle(.secondary)
             }
 
-            Stepper(
-                "Target: \(item.targetSets) \(item.targetSets == 1 ? "set" : "sets")",
-                value: $item.targetSets,
-                in: 1...20
-            )
-            .font(.subheadline)
+            if item.sets.isEmpty {
+                Text("No sets yet.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(Array($item.sets.enumerated()), id: \.element.id) { index, $set in
+                    DraftSetRow(number: index + 1, set: $set) {
+                        removeSet(at: index)
+                    }
+                }
+            }
+
+            Button {
+                addSet()
+            } label: {
+                Label("Add Set", systemImage: "plus")
+                    .font(.subheadline)
+            }
+            .buttonStyle(.borderless)
         }
         .padding(.vertical, 2)
+    }
+
+    /// Appends a set, copying the last set's targets as a starting point.
+    private func addSet() {
+        let previous = item.sets.last
+        item.sets.append(
+            DraftSet(
+                targetReps: previous?.targetReps ?? 10,
+                targetWeight: previous?.targetWeight ?? 0
+            )
+        )
+    }
+
+    private func removeSet(at index: Int) {
+        guard item.sets.indices.contains(index) else { return }
+        item.sets.remove(at: index)
+    }
+}
+
+/// A single editable target set: its number plus reps and weight fields and a
+/// remove control.
+private struct DraftSetRow: View {
+    let number: Int
+    @Binding var set: DraftSet
+    let onRemove: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text("\(number)")
+                .font(.subheadline.weight(.semibold).monospacedDigit())
+                .frame(width: 26, height: 26)
+                .background(Color.secondary.opacity(0.15), in: Circle())
+                .foregroundStyle(.secondary)
+
+            fieldColumn(title: "Reps") {
+                TextField("0", value: $set.targetReps, format: .number)
+                    .keyboardType(.numberPad)
+            }
+
+            fieldColumn(title: "Weight") {
+                TextField("0", value: $set.targetWeight, format: .number)
+                    .keyboardType(.decimalPad)
+            }
+
+            Button(role: .destructive, action: onRemove) {
+                Image(systemName: "minus.circle")
+            }
+            .buttonStyle(.borderless)
+            .accessibilityLabel("Remove set \(number)")
+        }
+    }
+
+    /// A titled, left-aligned numeric entry column.
+    private func fieldColumn(title: String, @ViewBuilder field: () -> some View) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            field()
+                .multilineTextAlignment(.leading)
+                .textFieldStyle(.roundedBorder)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
