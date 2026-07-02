@@ -49,12 +49,19 @@ struct ActiveWorkoutView: View {
                         ExerciseSection(
                             workoutExercise: workoutExercise,
                             defaultRestSeconds: defaultRestSeconds,
+                            superset: superset(for: workoutExercise),
                             onAddSet: { addSet(to: workoutExercise) },
                             onDeleteSets: { offsets in
                                 deleteSets(at: offsets, from: workoutExercise)
                             },
                             onRemoveExercise: { remove(workoutExercise) },
-                            onComplete: { startRest(for: workoutExercise) }
+                            onComplete: { startRest(for: workoutExercise) },
+                            onSupersetWithNext: hasNextExercise(after: workoutExercise)
+                                ? { supersetWithNext(workoutExercise) }
+                                : nil,
+                            onLeaveSuperset: workoutExercise.isInSuperset
+                                ? { leaveSuperset(workoutExercise) }
+                                : nil
                         )
                     }
                 }
@@ -177,6 +184,86 @@ struct ActiveWorkoutView: View {
         for (index, remaining) in workout.orderedExercises.enumerated() where remaining.order != index {
             remaining.order = index
         }
+        // Removing a member may leave a superset with a single exercise.
+        normalizeSupersets()
+    }
+
+    // MARK: - Supersets
+
+    /// Display metadata for the superset `workoutExercise` belongs to, or `nil`
+    /// if it stands alone. Letters (A, B, …) are assigned top-to-bottom.
+    private func superset(for workoutExercise: WorkoutExercise) -> SupersetContext? {
+        guard let group = workoutExercise.supersetGroup,
+              let letter = supersetLetters[group] else { return nil }
+        for block in workout.exerciseGroups where block.first?.supersetGroup == group {
+            guard let position = block.firstIndex(where: { $0.id == workoutExercise.id }) else {
+                break
+            }
+            return SupersetContext(letter: letter, index: position + 1, count: block.count)
+        }
+        return nil
+    }
+
+    /// Stable A, B, C… labels for each active superset, in display order.
+    private var supersetLetters: [UUID: String] {
+        var letters: [UUID: String] = [:]
+        var index = 0
+        for block in workout.exerciseGroups where block.count > 1 {
+            guard let group = block.first?.supersetGroup else { continue }
+            let scalar = UnicodeScalar(65 + min(index, 25))!
+            letters[group] = String(scalar)
+            index += 1
+        }
+        return letters
+    }
+
+    private func hasNextExercise(after workoutExercise: WorkoutExercise) -> Bool {
+        let ordered = workout.orderedExercises
+        guard let index = ordered.firstIndex(where: { $0.id == workoutExercise.id }) else {
+            return false
+        }
+        return index + 1 < ordered.count
+    }
+
+    /// Links `workoutExercise` with the exercise directly below it into a
+    /// superset — extending its existing group, or creating a fresh one.
+    private func supersetWithNext(_ workoutExercise: WorkoutExercise) {
+        let ordered = workout.orderedExercises
+        guard let index = ordered.firstIndex(where: { $0.id == workoutExercise.id }),
+              index + 1 < ordered.count else { return }
+        let group = workoutExercise.supersetGroup ?? UUID()
+        workoutExercise.supersetGroup = group
+        ordered[index + 1].supersetGroup = group
+        normalizeSupersets()
+    }
+
+    /// Detaches `workoutExercise` from its superset, dissolving the group if
+    /// only one member would remain.
+    private func leaveSuperset(_ workoutExercise: WorkoutExercise) {
+        workoutExercise.supersetGroup = nil
+        normalizeSupersets()
+    }
+
+    /// Enforces the superset invariant: every group must have two or more
+    /// *contiguous* members. Any run shorter than two is dissolved back to solo
+    /// exercises. Run after any grouping edit.
+    private func normalizeSupersets() {
+        let ordered = workout.orderedExercises
+        var start = 0
+        while start < ordered.count {
+            guard let group = ordered[start].supersetGroup else {
+                start += 1
+                continue
+            }
+            var end = start
+            while end < ordered.count && ordered[end].supersetGroup == group {
+                end += 1
+            }
+            if end - start < 2 {
+                for i in start..<end { ordered[i].supersetGroup = nil }
+            }
+            start = end
+        }
     }
 
     /// Completes the session: stamp the finish time so it moves to history.
@@ -222,6 +309,26 @@ private struct WorkoutTimer: View {
     }
 }
 
+// MARK: - Superset context
+
+/// Display metadata describing where an exercise sits within its superset.
+///
+/// Built per-render from the workout's grouping so the header can show a stable
+/// "Superset A · 1 of 2" chip and decide whether to prompt the user to alternate
+/// to the next exercise.
+struct SupersetContext {
+    /// Group label assigned top-to-bottom (A, B, C…).
+    let letter: String
+    /// This exercise's 1-based position within the group.
+    let index: Int
+    /// Total number of exercises in the group.
+    let count: Int
+
+    /// `true` when this is the final exercise in the group — after it the user
+    /// loops back to the top rather than alternating onward.
+    var isLast: Bool { index == count }
+}
+
 // MARK: - Exercise section
 
 /// One exercise within the active workout: its header, notes, set list, and an
@@ -230,11 +337,18 @@ private struct ExerciseSection: View {
     @Bindable var workoutExercise: WorkoutExercise
     /// App-wide default, shown as the fallback choice in the rest override menu.
     let defaultRestSeconds: Int
+    /// Superset placement for this exercise, or `nil` when it stands alone.
+    let superset: SupersetContext?
     let onAddSet: () -> Void
     let onDeleteSets: (IndexSet) -> Void
     let onRemoveExercise: () -> Void
     /// Fired when a set within this exercise is checked complete.
     let onComplete: () -> Void
+    /// Links this exercise with the one below into a superset. `nil` when there
+    /// is no exercise below to link to.
+    let onSupersetWithNext: (() -> Void)?
+    /// Detaches this exercise from its superset. `nil` when it isn't in one.
+    let onLeaveSuperset: (() -> Void)?
 
     var body: some View {
         Section {
@@ -256,16 +370,79 @@ private struct ExerciseSection: View {
                     .font(.callout)
             }
         } header: {
-            HStack {
-                Text(workoutExercise.exercise?.name ?? "Exercise")
-                Spacer()
-                restMenu
-                Button(role: .destructive, action: onRemoveExercise) {
-                    Image(systemName: "trash")
+            VStack(alignment: .leading, spacing: 6) {
+                if let superset {
+                    supersetBadge(superset)
                 }
-                .buttonStyle(.borderless)
-                .accessibilityLabel("Remove exercise")
+                HStack {
+                    Text(workoutExercise.exercise?.name ?? "Exercise")
+                    Spacer()
+                    supersetMenu
+                    restMenu
+                    Button(role: .destructive, action: onRemoveExercise) {
+                        Image(systemName: "trash")
+                    }
+                    .buttonStyle(.borderless)
+                    .accessibilityLabel("Remove exercise")
+                }
             }
+        } footer: {
+            if let superset, !superset.isLast {
+                Label(
+                    "Alternate to the next exercise, then continue.",
+                    systemImage: "arrow.triangle.2.circlepath"
+                )
+                .font(.caption)
+                .textCase(nil)
+            }
+        }
+    }
+
+    /// The superset identity chip: its letter and this exercise's position
+    /// within the group (e.g. "SUPERSET A · 1 of 2").
+    private func supersetBadge(_ superset: SupersetContext) -> some View {
+        Label(
+            "Superset \(superset.letter) · \(superset.index) of \(superset.count)",
+            systemImage: "link"
+        )
+        .font(.caption2.weight(.bold))
+        .textCase(nil)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
+        .background(Color.indigo.opacity(0.18), in: Capsule())
+        .foregroundStyle(Color.indigo)
+        .accessibilityLabel(
+            "Superset \(superset.letter), exercise \(superset.index) of \(superset.count)"
+        )
+    }
+
+    /// Grouping controls: link this exercise with the one below, or leave the
+    /// current superset. Hidden entirely when neither action is available.
+    @ViewBuilder
+    private var supersetMenu: some View {
+        if onSupersetWithNext != nil || onLeaveSuperset != nil {
+            Menu {
+                if let onSupersetWithNext {
+                    Button {
+                        onSupersetWithNext()
+                    } label: {
+                        Label("Superset with Next", systemImage: "link")
+                    }
+                }
+                if let onLeaveSuperset {
+                    Button(role: .destructive) {
+                        onLeaveSuperset()
+                    } label: {
+                        Label("Remove from Superset", systemImage: "minus.circle")
+                    }
+                }
+            } label: {
+                Image(systemName: "link")
+                    .font(.caption)
+            }
+            .buttonStyle(.borderless)
+            .textCase(nil)
+            .accessibilityLabel("Superset options")
         }
     }
 

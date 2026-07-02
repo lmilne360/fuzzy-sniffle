@@ -282,4 +282,55 @@ final class PersistenceTests: XCTestCase {
 
         XCTAssertEqual(fetched.map(\.weight), [181, 183])
     }
+
+    // MARK: - Superset grouping (ba-07l.6)
+
+    /// With no superset ids assigned, every exercise is its own single-element
+    /// block, in order.
+    func testExerciseGroupsWithoutSupersetsAreAllSolo() {
+        let workout = Workout()
+        workout.exercises = [
+            WorkoutExercise(order: 2),
+            WorkoutExercise(order: 0),
+            WorkoutExercise(order: 1),
+        ]
+
+        let groups = workout.exerciseGroups
+        XCTAssertEqual(groups.count, 3)
+        XCTAssertEqual(groups.map(\.count), [1, 1, 1])
+        XCTAssertEqual(groups.map { $0[0].order }, [0, 1, 2])
+    }
+
+    /// Consecutive exercises sharing a superset id collapse into one block while
+    /// the exercises around them stay solo.
+    func testExerciseGroupsCollapsesContiguousSuperset() {
+        let group = UUID()
+        let workout = Workout()
+        workout.exercises = [
+            WorkoutExercise(order: 0),
+            WorkoutExercise(order: 1, supersetGroup: group),
+            WorkoutExercise(order: 2, supersetGroup: group),
+            WorkoutExercise(order: 3),
+        ]
+
+        let groups = workout.exerciseGroups
+        XCTAssertEqual(groups.map(\.count), [1, 2, 1])
+        XCTAssertEqual(groups[1].map { $0.supersetGroup }, [group, group])
+        XCTAssertTrue(groups[1].allSatisfy { $0.isInSuperset })
+    }
+
+    /// The same superset id split by an exercise in between forms two separate
+    /// blocks — grouping is contiguity-based, not id-based.
+    func testExerciseGroupsDoesNotMergeNonContiguousSameGroup() {
+        let group = UUID()
+        let workout = Workout()
+        workout.exercises = [
+            WorkoutExercise(order: 0, supersetGroup: group),
+            WorkoutExercise(order: 1),
+            WorkoutExercise(order: 2, supersetGroup: group),
+        ]
+
+        let groups = workout.exerciseGroups
+        XCTAssertEqual(groups.map(\.count), [1, 1, 1])
+    }
 }
