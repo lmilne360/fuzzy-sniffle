@@ -10,13 +10,17 @@ import SwiftData
 @Model
 final class Exercise {
     /// Stable identity, useful for seeding idempotently and for diffing in views.
-    @Attribute(.unique) var id: UUID
-    var name: String
-    var category: ExerciseCategory
-    var primaryMuscle: Muscle
-    var equipment: Equipment
+    ///
+    /// CloudKit sync forbids unique constraints, so uniqueness rests on UUID
+    /// generation rather than a store-enforced index. Every stored property
+    /// carries a default value — another CloudKit requirement.
+    var id: UUID = UUID()
+    var name: String = ""
+    var category: ExerciseCategory = .other
+    var primaryMuscle: Muscle = .other
+    var equipment: Equipment = .other
     /// `true` for user-created exercises, `false` for the seeded library.
-    var isCustom: Bool
+    var isCustom: Bool = false
     /// Per-exercise rest-timer override, in seconds. `nil` falls back to the
     /// app-wide default (see ``RestTimerController``). Optional so existing
     /// stores migrate automatically.

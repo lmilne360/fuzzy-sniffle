@@ -6,15 +6,15 @@ import SwiftData
 /// copies these items and their per-set targets into a `Workout`.
 @Model
 final class Routine {
-    @Attribute(.unique) var id: UUID
-    var name: String
-    var createdAt: Date
+    var id: UUID = UUID()
+    var name: String = ""
+    var createdAt: Date = Date()
 
     /// Owned children. `RoutineItem.order` defines display order — SwiftData
     /// does not guarantee to-many relationship ordering, so read via
     /// ``orderedItems``.
     @Relationship(deleteRule: .cascade, inverse: \RoutineItem.routine)
-    var items: [RoutineItem]
+    var items: [RoutineItem] = []
 
     init(
         id: UUID = UUID(),
@@ -38,9 +38,9 @@ final class Routine {
 /// it sits in the ordered list.
 @Model
 final class RoutineItem {
-    @Attribute(.unique) var id: UUID
+    var id: UUID = UUID()
     /// Position within the parent routine (ascending).
-    var order: Int
+    var order: Int = 0
     /// Referenced exercise. Optional so a deleted exercise nullifies rather
     /// than cascading through the routine.
     var exercise: Exercise?
@@ -51,7 +51,7 @@ final class RoutineItem {
     /// ``orderedSets``. Defaults empty, which keeps the schema change a
     /// lightweight SwiftData migration.
     @Relationship(deleteRule: .cascade, inverse: \RoutineSet.routineItem)
-    var sets: [RoutineSet]
+    var sets: [RoutineSet] = []
 
     init(
         id: UUID = UUID(),
@@ -76,14 +76,14 @@ final class RoutineItem {
 /// the routine seeds each `SetEntry` from these targets.
 @Model
 final class RoutineSet {
-    @Attribute(.unique) var id: UUID
+    var id: UUID = UUID()
     /// Position within the parent item (ascending).
-    var order: Int
+    var order: Int = 0
     /// Planned repetitions for this set.
-    var targetReps: Int
+    var targetReps: Int = 0
     /// Planned weight in the user's preferred unit (unit handling lives in the
     /// UI layer, matching `SetEntry`).
-    var targetWeight: Double
+    var targetWeight: Double = 0
     /// Inverse of ``RoutineItem/sets``.
     var routineItem: RoutineItem?
 
