@@ -22,6 +22,19 @@ final class Exercise {
     /// stores migrate automatically.
     var restDuration: Int?
 
+    /// Back-references from routines that use this exercise. Declared so
+    /// SwiftData tracks the inverse and can apply the `.nullify` delete rule:
+    /// deleting an `Exercise` sets each `RoutineItem.exercise` to `nil` rather
+    /// than leaving a dangling reference (ba-dw3).
+    @Relationship(deleteRule: .nullify, inverse: \RoutineItem.exercise)
+    var routineItems: [RoutineItem] = []
+
+    /// Back-references from logged workouts that use this exercise. Declared so
+    /// SwiftData tracks the inverse and nullifies each `WorkoutExercise.exercise`
+    /// on delete, preserving workout history (ba-dw3).
+    @Relationship(deleteRule: .nullify, inverse: \WorkoutExercise.exercise)
+    var workoutExercises: [WorkoutExercise] = []
+
     init(
         id: UUID = UUID(),
         name: String,

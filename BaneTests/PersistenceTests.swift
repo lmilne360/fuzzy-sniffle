@@ -112,11 +112,9 @@ final class PersistenceTests: XCTestCase {
     /// Deleting an `Exercise` must nullify — not cascade through — the
     /// `RoutineItem` that references it; the routine keeps its structure.
     ///
-    /// The nullify assertion is currently a known failure (ba-dw3): `Exercise`
-    /// declares no inverse relationship, so SwiftData never nullifies the
-    /// forward reference and it dangles at a deleted object. The test encodes
-    /// the *documented* contract; remove the `XCTExpectFailure` wrapper once
-    /// ba-dw3 adds the inverse relationships.
+    /// `Exercise` declares an inverse `routineItems` relationship with a
+    /// `.nullify` delete rule (ba-dw3), so SwiftData clears the forward
+    /// reference on delete instead of leaving it dangling.
     func testDeletingExerciseNullifiesRoutineItemReference() throws {
         let exercise = Exercise(
             name: "Squat",
@@ -138,17 +136,16 @@ final class PersistenceTests: XCTestCase {
         XCTAssertEqual(try context.fetchCount(FetchDescriptor<RoutineItem>()), 1,
                        "The routine item should survive its exercise being deleted")
         let survivingItem = try XCTUnwrap(try context.fetch(FetchDescriptor<RoutineItem>()).first)
-        XCTExpectFailure("ba-dw3: nullify delete rule not enforced without an inverse relationship") {
-            XCTAssertNil(survivingItem.exercise,
-                         "The item's exercise reference should be nullified, not dangling")
-        }
+        XCTAssertNil(survivingItem.exercise,
+                     "The item's exercise reference should be nullified, not dangling")
     }
 
     /// Deleting an `Exercise` must nullify the `WorkoutExercise` reference so
     /// workout history is preserved.
     ///
-    /// The nullify assertion is a known failure (ba-dw3) — see
-    /// ``testDeletingExerciseNullifiesRoutineItemReference`` for the root cause.
+    /// Backed by the inverse `workoutExercises` relationship with a `.nullify`
+    /// delete rule (ba-dw3) — see
+    /// ``testDeletingExerciseNullifiesRoutineItemReference`` for the details.
     func testDeletingExerciseNullifiesWorkoutExerciseReference() throws {
         let exercise = Exercise(
             name: "Deadlift",
@@ -170,10 +167,8 @@ final class PersistenceTests: XCTestCase {
         XCTAssertEqual(try context.fetchCount(FetchDescriptor<WorkoutExercise>()), 1,
                        "The workout exercise should survive its exercise being deleted")
         let surviving = try XCTUnwrap(try context.fetch(FetchDescriptor<WorkoutExercise>()).first)
-        XCTExpectFailure("ba-dw3: nullify delete rule not enforced without an inverse relationship") {
-            XCTAssertNil(surviving.exercise,
-                         "The workout exercise's reference should be nullified, not dangling")
-        }
+        XCTAssertNil(surviving.exercise,
+                     "The workout exercise's reference should be nullified, not dangling")
     }
 
     // MARK: - Ordered accessors
