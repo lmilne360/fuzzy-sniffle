@@ -6,7 +6,18 @@ import SwiftData
 /// Owns the canonical ``schema`` (every `@Model` type must be listed here) and
 /// vends `ModelContainer`s: a persistent ``shared`` container for the running
 /// app and an in-memory container for previews and tests.
+///
+/// The persistent container mirrors to CloudKit's private database so a user's
+/// data follows them across their devices. CloudKit imposes schema constraints
+/// the models satisfy: no `@Attribute(.unique)` constraints, every non-optional
+/// attribute has a default value, and every to-one relationship is optional.
+/// The in-memory container skips CloudKit entirely — previews and tests must
+/// not touch the network or require an iCloud account.
 enum Persistence {
+    /// The CloudKit container the private database mirrors into. Must match the
+    /// `com.apple.developer.icloud-container-identifiers` entitlement.
+    static let cloudKitContainerID = "iCloud.com.bane.Bane"
+
     /// The full model schema. Add new `@Model` types here as they are created.
     static let schema = Schema([
         Exercise.self,
@@ -33,9 +44,15 @@ enum Persistence {
 
     @MainActor
     private static func makeContainer(inMemory: Bool) -> ModelContainer {
+        // On-disk stores mirror to the private CloudKit database; in-memory
+        // stores (previews, tests) stay local so they need no iCloud account.
+        let cloudKitDatabase: ModelConfiguration.CloudKitDatabase = inMemory
+            ? .none
+            : .private(cloudKitContainerID)
         let configuration = ModelConfiguration(
             schema: schema,
-            isStoredInMemoryOnly: inMemory
+            isStoredInMemoryOnly: inMemory,
+            cloudKitDatabase: cloudKitDatabase
         )
         do {
             return try ModelContainer(for: schema, configurations: [configuration])

@@ -10,11 +10,19 @@ final class Routine {
     var name: String = ""
     var createdAt: Date = Date()
 
+    /// Backing store for ``items``. CloudKit requires to-many relationships be
+    /// optional, so the persisted relationship is optional and ``items`` vends a
+    /// non-optional view over it.
+    @Relationship(deleteRule: .cascade, inverse: \RoutineItem.routine)
+    private var storedItems: [RoutineItem]?
+
     /// Owned children. `RoutineItem.order` defines display order — SwiftData
     /// does not guarantee to-many relationship ordering, so read via
     /// ``orderedItems``.
-    @Relationship(deleteRule: .cascade, inverse: \RoutineItem.routine)
-    var items: [RoutineItem] = []
+    var items: [RoutineItem] {
+        get { storedItems ?? [] }
+        set { storedItems = newValue }
+    }
 
     init(
         id: UUID = UUID(),
@@ -47,11 +55,16 @@ final class RoutineItem {
     /// Inverse of ``Routine/items``.
     var routine: Routine?
 
-    /// Owned target sets. `RoutineSet.order` defines display order — read via
-    /// ``orderedSets``. Defaults empty, which keeps the schema change a
-    /// lightweight SwiftData migration.
+    /// Backing store for ``sets`` — optional to satisfy CloudKit's to-many rule.
     @Relationship(deleteRule: .cascade, inverse: \RoutineSet.routineItem)
-    var sets: [RoutineSet] = []
+    private var storedSets: [RoutineSet]?
+
+    /// Owned target sets. `RoutineSet.order` defines display order — read via
+    /// ``orderedSets``.
+    var sets: [RoutineSet] {
+        get { storedSets ?? [] }
+        set { storedSets = newValue }
+    }
 
     init(
         id: UUID = UUID(),

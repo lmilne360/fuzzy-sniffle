@@ -13,9 +13,15 @@ final class Workout {
     var startedAt: Date?
     var finishedAt: Date?
 
-    /// Owned children, ordered by `WorkoutExercise.order` (see ``orderedExercises``).
+    /// Backing store for ``exercises`` — optional to satisfy CloudKit's to-many rule.
     @Relationship(deleteRule: .cascade, inverse: \WorkoutExercise.workout)
-    var exercises: [WorkoutExercise] = []
+    private var storedExercises: [WorkoutExercise]?
+
+    /// Owned children, ordered by `WorkoutExercise.order` (see ``orderedExercises``).
+    var exercises: [WorkoutExercise] {
+        get { storedExercises ?? [] }
+        set { storedExercises = newValue }
+    }
 
     init(
         id: UUID = UUID(),
@@ -74,14 +80,20 @@ final class WorkoutExercise {
     /// stays migration-safe for workouts logged before supersets existed.
     var supersetGroup: UUID?
     /// Referenced exercise. Optional so a deleted exercise nullifies rather
-    /// than cascading through workout history.
+    /// than cascading through workout history. Inverse: ``Exercise/workoutExercises``.
     var exercise: Exercise?
     /// Inverse of ``Workout/exercises``.
     var workout: Workout?
 
-    /// Owned children, ordered by `SetEntry.order` (see ``orderedSets``).
+    /// Backing store for ``sets`` — optional to satisfy CloudKit's to-many rule.
     @Relationship(deleteRule: .cascade, inverse: \SetEntry.workoutExercise)
-    var sets: [SetEntry] = []
+    private var storedSets: [SetEntry]?
+
+    /// Owned children, ordered by `SetEntry.order` (see ``orderedSets``).
+    var sets: [SetEntry] {
+        get { storedSets ?? [] }
+        set { storedSets = newValue }
+    }
 
     init(
         id: UUID = UUID(),

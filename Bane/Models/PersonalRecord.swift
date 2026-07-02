@@ -47,7 +47,7 @@ enum PRMetric: String, Codable, CaseIterable, Identifiable, Sendable {
 final class PersonalRecord {
     var id: UUID = UUID()
     /// Which metric this row records.
-    var metric: PRMetric = .heaviestWeight
+    var metric: PRMetric = PRMetric.heaviestWeight
     /// The metric's value — weight, estimated 1RM, or set volume depending on
     /// ``metric``. Unitless, mirroring the rest of the data model.
     var value: Double = 0
