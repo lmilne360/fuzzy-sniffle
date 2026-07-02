@@ -18,12 +18,14 @@ struct RoutineEditorView: View {
     private let routine: Routine?
 
     @State private var name: String
+    @State private var progressiveOverloadEnabled: Bool
     @State private var items: [DraftItem]
     @State private var isPresentingPicker = false
 
     init(routine: Routine? = nil) {
         self.routine = routine
         _name = State(initialValue: routine?.name ?? "")
+        _progressiveOverloadEnabled = State(initialValue: routine?.progressiveOverloadEnabled ?? false)
         _items = State(
             initialValue: (routine?.orderedItems ?? []).compactMap { item in
                 // Drop items whose exercise was deleted out from under us; they
@@ -32,7 +34,13 @@ struct RoutineEditorView: View {
                 let sets = item.orderedSets.map {
                     DraftSet(targetReps: $0.targetReps, targetWeight: $0.targetWeight)
                 }
-                return DraftItem(exercise: exercise, sets: sets)
+                return DraftItem(
+                    exercise: exercise,
+                    repRangeMin: item.effectiveRepRangeMin,
+                    repRangeMax: item.effectiveRepRangeMax,
+                    weightIncrement: item.effectiveWeightIncrement,
+                    sets: sets
+                )
             }
         )
     }
@@ -50,6 +58,12 @@ struct RoutineEditorView: View {
                     .textInputAutocapitalization(.words)
             }
 
+            Section {
+                Toggle("Progressive Overload", isOn: $progressiveOverloadEnabled)
+            } footer: {
+                Text("Auto-adjusts each exercise from your last session: hit the top of the rep range on every set and the weight goes up and reps reset to the bottom; otherwise add a rep toward the top at the same weight.")
+            }
+
             Section("Exercises") {
                 if items.isEmpty {
                     Text("No exercises yet. Add one below.")
@@ -57,7 +71,7 @@ struct RoutineEditorView: View {
                 }
 
                 ForEach($items) { $item in
-                    DraftItemRow(item: $item)
+                    DraftItemRow(item: $item, showProgressionFields: progressiveOverloadEnabled)
                 }
                 .onMove(perform: move)
                 .onDelete(perform: delete)
@@ -123,9 +137,16 @@ struct RoutineEditorView: View {
             target = Routine(name: trimmedName)
             modelContext.insert(target)
         }
+        target.progressiveOverloadEnabled = progressiveOverloadEnabled
 
         for (index, draft) in items.enumerated() {
-            let item = RoutineItem(order: index, exercise: draft.exercise)
+            let item = RoutineItem(
+                order: index,
+                exercise: draft.exercise,
+                repRangeMin: draft.repRangeMin,
+                repRangeMax: draft.repRangeMax,
+                weightIncrement: draft.weightIncrement
+            )
             item.routine = target
             modelContext.insert(item)
 
@@ -150,6 +171,12 @@ struct RoutineEditorView: View {
 private struct DraftItem: Identifiable {
     let id = UUID()
     var exercise: Exercise
+    /// Double-progression rep range and load step. Seeded from the shared
+    /// defaults for new items so the fields always show a value; edits are
+    /// persisted to ``RoutineItem`` on save (ba-3hk).
+    var repRangeMin: Int = ProgressiveOverload.defaultMinReps
+    var repRangeMax: Int = ProgressiveOverload.defaultMaxReps
+    var weightIncrement: Double = ProgressiveOverload.defaultIncrementPounds
     var sets: [DraftSet]
 
     /// The sets a freshly-added exercise starts with: three working sets seeded
@@ -171,6 +198,12 @@ private struct DraftSet: Identifiable {
 /// and weight, with controls to add or remove sets.
 private struct DraftItemRow: View {
     @Binding var item: DraftItem
+    /// Whether to expose the double-progression rep-range / increment fields —
+    /// on only when the routine's Progressive Overload toggle is enabled.
+    let showProgressionFields: Bool
+
+    /// The unit the weight increment is displayed and entered in; storage stays pounds.
+    @AppStorage(WeightPreferences.unitKey) private var weightUnit = WeightPreferences.fallback
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -179,6 +212,10 @@ private struct DraftItemRow: View {
                 Text("\(item.exercise.primaryMuscle.displayName) · \(item.exercise.equipment.displayName)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
+
+            if showProgressionFields {
+                progressionFields
             }
 
             if item.sets.isEmpty {
@@ -202,6 +239,38 @@ private struct DraftItemRow: View {
             .buttonStyle(.borderless)
         }
         .padding(.vertical, 2)
+    }
+
+    /// The double-progression tuning row: rep-range min/max and the load step
+    /// applied when the whole range is cleared.
+    private var progressionFields: some View {
+        HStack(spacing: 12) {
+            fieldColumn(title: "Min reps") {
+                TextField("\(ProgressiveOverload.defaultMinReps)", value: $item.repRangeMin, format: .number)
+                    .keyboardType(.numberPad)
+            }
+            fieldColumn(title: "Max reps") {
+                TextField("\(ProgressiveOverload.defaultMaxReps)", value: $item.repRangeMax, format: .number)
+                    .keyboardType(.numberPad)
+            }
+            fieldColumn(title: "Increment (\(weightUnit.abbreviation))") {
+                TextField("0", value: $item.weightIncrement.weightDisplay(in: weightUnit), format: .number)
+                    .keyboardType(.decimalPad)
+            }
+        }
+    }
+
+    /// A titled, left-aligned numeric entry column (mirrors ``DraftSetRow``).
+    private func fieldColumn(title: String, @ViewBuilder field: () -> some View) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            field()
+                .multilineTextAlignment(.leading)
+                .textFieldStyle(.roundedBorder)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     /// Appends a set, copying the last set's targets as a starting point.

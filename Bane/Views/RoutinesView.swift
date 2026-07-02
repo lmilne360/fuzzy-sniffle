@@ -104,7 +104,7 @@ struct RoutinesView: View {
 
     /// Builds a pre-populated workout from the routine and opens it for logging.
     private func start(_ routine: Routine) {
-        let workout = Workout.from(routine: routine)
+        let workout = Workout.fromProgressive(routine: routine, in: modelContext)
         modelContext.insert(workout)
         activeWorkout = workout
     }

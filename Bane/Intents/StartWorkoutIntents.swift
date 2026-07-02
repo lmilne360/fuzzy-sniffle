@@ -32,8 +32,10 @@ struct StartEmptyWorkoutIntent: AppIntent {
 /// logging.
 ///
 /// Mirrors the "Start Workout" action in ``RoutinesView``: builds a
-/// pre-populated `Workout` from the chosen routine (see `Workout.from(routine:)`),
-/// persists it, and hands it to the ``WorkoutSessionCoordinator``.
+/// pre-populated `Workout` from the chosen routine (see
+/// `Workout.fromProgressive(routine:in:)`, which applies double-progression
+/// targets when the routine opts in), persists it, and hands it to the
+/// ``WorkoutSessionCoordinator``.
 struct StartRoutineIntent: AppIntent {
     static var title: LocalizedStringResource = "Start Routine"
     static var description = IntentDescription(
@@ -60,7 +62,7 @@ struct StartRoutineIntent: AppIntent {
             throw StartRoutineError.routineNotFound
         }
 
-        let workout = Workout.from(routine: model)
+        let workout = Workout.fromProgressive(routine: model, in: context)
         context.insert(workout)
         try context.save()
 

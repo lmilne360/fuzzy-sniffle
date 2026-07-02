@@ -10,6 +10,12 @@ final class Routine {
     var name: String = ""
     var createdAt: Date = Date.now
 
+    /// When `true`, starting a workout from this routine auto-computes each
+    /// exercise's next rep/weight targets from the previous session using the
+    /// double-progression method (see ``ProgressiveOverload``). Defaults to
+    /// `false` so existing routines are unchanged until the user opts in (ba-3hk).
+    var progressiveOverloadEnabled: Bool = false
+
     /// Owned children. `RoutineItem.order` defines display order — SwiftData
     /// does not guarantee to-many relationship ordering, so read via
     /// ``orderedItems``.
@@ -30,11 +36,13 @@ final class Routine {
         id: UUID = UUID(),
         name: String,
         createdAt: Date = .now,
+        progressiveOverloadEnabled: Bool = false,
         items: [RoutineItem] = []
     ) {
         self.id = id
         self.name = name
         self.createdAt = createdAt
+        self.progressiveOverloadEnabled = progressiveOverloadEnabled
         self.storedItems = items
     }
 
@@ -57,6 +65,24 @@ final class RoutineItem {
     /// Inverse of ``Routine/items``.
     var routine: Routine?
 
+    /// Bottom of the target rep range for double progression. `nil` falls back
+    /// to ``ProgressiveOverload/defaultMinReps``. Migration-safe optional so
+    /// existing items load without a stored value (ba-3hk).
+    var repRangeMin: Int?
+    /// Top of the target rep range for double progression. `nil` falls back to
+    /// ``ProgressiveOverload/defaultMaxReps``.
+    var repRangeMax: Int?
+    /// Canonical-pounds load added when every working set hits the top of the
+    /// range. `nil` falls back to ``ProgressiveOverload/defaultIncrementPounds``.
+    var weightIncrement: Double?
+
+    /// Rep-range floor, applying the shared default when unset.
+    var effectiveRepRangeMin: Int { repRangeMin ?? ProgressiveOverload.defaultMinReps }
+    /// Rep-range ceiling, applying the shared default when unset.
+    var effectiveRepRangeMax: Int { repRangeMax ?? ProgressiveOverload.defaultMaxReps }
+    /// Weight increment in canonical pounds, applying the shared default when unset.
+    var effectiveWeightIncrement: Double { weightIncrement ?? ProgressiveOverload.defaultIncrementPounds }
+
     /// Owned target sets. `RoutineSet.order` defines display order — read via
     /// ``orderedSets``.
     ///
@@ -74,11 +100,17 @@ final class RoutineItem {
         id: UUID = UUID(),
         order: Int,
         exercise: Exercise? = nil,
+        repRangeMin: Int? = nil,
+        repRangeMax: Int? = nil,
+        weightIncrement: Double? = nil,
         sets: [RoutineSet] = []
     ) {
         self.id = id
         self.order = order
         self.exercise = exercise
+        self.repRangeMin = repRangeMin
+        self.repRangeMax = repRangeMax
+        self.weightIncrement = weightIncrement
         self.storedSets = sets
     }
 
