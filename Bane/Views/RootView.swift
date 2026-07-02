@@ -62,6 +62,13 @@ struct RootView: View {
             }
 
             NavigationStack {
+                AchievementsView()
+            }
+            .tabItem {
+                Label("Achievements", systemImage: "rosette")
+            }
+
+            NavigationStack {
                 MeasurementsView()
             }
             .tabItem {
