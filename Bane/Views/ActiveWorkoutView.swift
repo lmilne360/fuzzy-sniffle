@@ -41,6 +41,20 @@ enum ManualWarmup {
     }
 }
 
+/// Swapping an active-workout exercise for an alternative.
+///
+/// Extracted from the view so the contract — the referenced exercise changes
+/// while the logged set structure (reps, weight, completion, warm-up flags,
+/// order) is left untouched — is unit-testable against SwiftData models (ba-oy0.4).
+enum ExerciseSwap {
+    /// Repoints `workoutExercise` at `replacement`, keeping every logged set as
+    /// it was. Only the exercise identity changes, so notes, superset grouping,
+    /// and the set ladder all carry over.
+    static func swap(_ workoutExercise: WorkoutExercise, to replacement: Exercise) {
+        workoutExercise.exercise = replacement
+    }
+}
+
 /// Look-up of what the user did *last time* for an exercise, surfaced as ghost
 /// values beside each set while logging (Strong's signature "previous" column).
 ///
@@ -110,6 +124,9 @@ struct ActiveWorkoutView: View {
 
     @State private var isPickingExercise = false
     @State private var isConfirmingDiscard = false
+    /// The exercise the user is choosing a swap replacement for, driving the
+    /// alternatives picker sheet. `nil` when no swap is in progress.
+    @State private var swappingExercise: WorkoutExercise?
 
     /// Drives the between-sets rest countdown surfaced at the bottom of the view.
     @State private var restTimer = RestTimerController()
@@ -138,6 +155,7 @@ struct ActiveWorkoutView: View {
                                 deleteSets(at: offsets, from: workoutExercise)
                             },
                             onRemoveExercise: { remove(workoutExercise) },
+                            onSwap: { swappingExercise = workoutExercise },
                             onComplete: { set in startRest(for: workoutExercise, set: set) },
                             onAddWarmups: { warmups in
                                 addWarmupSets(warmups, to: workoutExercise)
@@ -180,6 +198,15 @@ struct ActiveWorkoutView: View {
             .sheet(isPresented: $isPickingExercise) {
                 NavigationStack {
                     ExercisePickerView(onSelect: add(_:))
+                }
+            }
+            .sheet(item: $swappingExercise) { workoutExercise in
+                NavigationStack {
+                    ExercisePickerView(
+                        alternativesFor: workoutExercise.exercise,
+                        title: "Swap Exercise",
+                        onSelect: { swap(workoutExercise, to: $0) }
+                    )
                 }
             }
             .confirmationDialog(
@@ -244,6 +271,12 @@ struct ActiveWorkoutView: View {
         let firstSet = SetEntry(order: 0)
         firstSet.workoutExercise = workoutExercise
         workoutExercise.sets.append(firstSet)
+    }
+
+    /// Swaps `workoutExercise` for `replacement`, preserving its logged sets.
+    /// The user picked an alternative (same primary muscle) from the swap sheet.
+    private func swap(_ workoutExercise: WorkoutExercise, to replacement: Exercise) {
+        ExerciseSwap.swap(workoutExercise, to: replacement)
     }
 
     /// Adds a new set to the exercise, copying the reps/weight of the last set as
@@ -478,6 +511,8 @@ private struct ExerciseSection: View {
     let onAddWarmupSet: () -> Void
     let onDeleteSets: (IndexSet) -> Void
     let onRemoveExercise: () -> Void
+    /// Opens the alternatives picker to swap this exercise for another.
+    let onSwap: () -> Void
     /// Fired with the set that was just checked complete.
     let onComplete: (SetEntry) -> Void
     /// Prepends a freshly calculated warm-up ladder to this exercise.
@@ -524,6 +559,7 @@ private struct ExerciseSection: View {
                     Text(workoutExercise.exercise?.name ?? "Exercise")
                     Spacer()
                     warmupButton
+                    swapButton
                     supersetMenu
                     restMenu
                     Button(role: .destructive, action: onRemoveExercise) {
@@ -559,6 +595,18 @@ private struct ExerciseSection: View {
         .buttonStyle(.borderless)
         .textCase(nil)
         .accessibilityLabel("Add warm-up sets")
+    }
+
+    /// A button that opens the alternatives picker to swap this exercise for
+    /// another training the same muscle, keeping the logged sets.
+    private var swapButton: some View {
+        Button(action: onSwap) {
+            Image(systemName: "arrow.left.arrow.right")
+                .font(.caption)
+        }
+        .buttonStyle(.borderless)
+        .textCase(nil)
+        .accessibilityLabel("Swap exercise")
     }
 
     /// What the user did last session, keyed by current set id, for the "last
