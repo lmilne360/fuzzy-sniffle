@@ -56,6 +56,9 @@ struct ActiveWorkoutView: View {
                             },
                             onRemoveExercise: { remove(workoutExercise) },
                             onComplete: { startRest(for: workoutExercise) },
+                            onAddWarmups: { warmups in
+                                addWarmupSets(warmups, to: workoutExercise)
+                            },
                             onSupersetWithNext: hasNextExercise(after: workoutExercise)
                                 ? { supersetWithNext(workoutExercise) }
                                 : nil,
@@ -166,6 +169,37 @@ struct ActiveWorkoutView: View {
         )
         newSet.workoutExercise = workoutExercise
         workoutExercise.sets.append(newSet)
+    }
+
+    /// Replaces the exercise's warm-up sets with a freshly calculated ladder,
+    /// prepending them ahead of the working sets and renumbering so warm-ups lead.
+    ///
+    /// Existing warm-ups are cleared first so re-running the calculator swaps in a
+    /// new ramp rather than stacking duplicates; the working sets keep their
+    /// order. Marked `isWarmup`, the new rows are ordinary sets the user can edit
+    /// or delete like any other.
+    private func addWarmupSets(
+        _ warmups: [WarmupCalculator.WarmupSet],
+        to workoutExercise: WorkoutExercise
+    ) {
+        guard !warmups.isEmpty else { return }
+
+        let workingSets = workoutExercise.orderedSets.filter { !$0.isWarmup }
+        for stale in workoutExercise.sets where stale.isWarmup {
+            modelContext.delete(stale)
+        }
+
+        let newWarmups = warmups.enumerated().map { index, warmup in
+            let set = SetEntry(order: index, reps: warmup.reps, weight: warmup.weight, isWarmup: true)
+            set.workoutExercise = workoutExercise
+            return set
+        }
+        workoutExercise.sets.append(contentsOf: newWarmups)
+
+        // Warm-ups lead in ladder order, working sets follow in their existing order.
+        for (offset, set) in workingSets.enumerated() {
+            set.order = newWarmups.count + offset
+        }
     }
 
     private func deleteSets(at offsets: IndexSet, from workoutExercise: WorkoutExercise) {
@@ -344,11 +378,16 @@ private struct ExerciseSection: View {
     let onRemoveExercise: () -> Void
     /// Fired when a set within this exercise is checked complete.
     let onComplete: () -> Void
+    /// Prepends a freshly calculated warm-up ladder to this exercise.
+    let onAddWarmups: ([WarmupCalculator.WarmupSet]) -> Void
     /// Links this exercise with the one below into a superset. `nil` when there
     /// is no exercise below to link to.
     let onSupersetWithNext: (() -> Void)?
     /// Detaches this exercise from its superset. `nil` when it isn't in one.
     let onLeaveSuperset: (() -> Void)?
+
+    /// Drives the warm-up calculator sheet.
+    @State private var isAddingWarmups = false
 
     var body: some View {
         Section {
@@ -377,6 +416,7 @@ private struct ExerciseSection: View {
                 HStack {
                     Text(workoutExercise.exercise?.name ?? "Exercise")
                     Spacer()
+                    warmupButton
                     supersetMenu
                     restMenu
                     Button(role: .destructive, action: onRemoveExercise) {
@@ -396,6 +436,31 @@ private struct ExerciseSection: View {
                 .textCase(nil)
             }
         }
+        .sheet(isPresented: $isAddingWarmups) {
+            WarmupCalculatorView(initialWorkingWeight: warmupSeedWeight, onAdd: onAddWarmups)
+        }
+    }
+
+    /// A flame button that opens the warm-up calculator for this exercise.
+    private var warmupButton: some View {
+        Button {
+            isAddingWarmups = true
+        } label: {
+            Image(systemName: "flame")
+                .font(.caption)
+        }
+        .buttonStyle(.borderless)
+        .textCase(nil)
+        .accessibilityLabel("Add warm-up sets")
+    }
+
+    /// Weight the warm-up calculator opens on: the heaviest working set, falling
+    /// back to the last logged set, then zero for a fresh exercise.
+    private var warmupSeedWeight: Double {
+        let working = workoutExercise.orderedSets.filter { !$0.isWarmup }
+        return working.map(\.weight).max()
+            ?? workoutExercise.orderedSets.last?.weight
+            ?? 0
     }
 
     /// The superset identity chip: its letter and this exercise's position
