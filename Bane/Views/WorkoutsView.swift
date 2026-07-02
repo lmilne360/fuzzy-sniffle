@@ -1,19 +1,126 @@
+import SwiftData
 import SwiftUI
 
-/// Placeholder for the workout-logging surface. Real content lands in ba-32q.3+.
+/// The Workouts tab: the entry point to the core logging loop.
+///
+/// Starts a new empty workout (or resumes an in-progress one) and presents
+/// ``ActiveWorkoutView``. Finished sessions are listed here as a lightweight
+/// history; the richer history experience lands in a later bead (ba-32q.6).
 struct WorkoutsView: View {
+    @Environment(\.modelContext) private var modelContext
+    @Query(sort: \Workout.date, order: .reverse) private var workouts: [Workout]
+
+    /// The workout currently presented full-screen for logging.
+    @State private var activeWorkout: Workout?
+
     var body: some View {
-        ContentUnavailableView(
-            "No Workouts Yet",
-            systemImage: "dumbbell",
-            description: Text("Logged workouts will appear here.")
-        )
+        List {
+            if !inProgress.isEmpty {
+                Section("In Progress") {
+                    ForEach(inProgress) { workout in
+                        Button {
+                            activeWorkout = workout
+                        } label: {
+                            WorkoutRow(workout: workout)
+                        }
+                    }
+                }
+            }
+
+            if !finished.isEmpty {
+                Section("History") {
+                    ForEach(finished) { workout in
+                        WorkoutRow(workout: workout)
+                    }
+                }
+            }
+        }
         .navigationTitle("Workouts")
+        .overlay {
+            if workouts.isEmpty {
+                emptyState
+            }
+        }
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button(action: startWorkout) {
+                    Label("Start Workout", systemImage: "plus")
+                }
+            }
+        }
+        .fullScreenCover(item: $activeWorkout) { workout in
+            ActiveWorkoutView(workout: workout)
+        }
+    }
+
+    private var inProgress: [Workout] {
+        workouts.filter { !$0.isFinished }
+    }
+
+    private var finished: [Workout] {
+        workouts.filter(\.isFinished)
+    }
+
+    private var emptyState: some View {
+        ContentUnavailableView {
+            Label("No Workouts Yet", systemImage: "dumbbell")
+        } description: {
+            Text("Start a workout to log your sets, reps, and weight.")
+        } actions: {
+            Button(action: startWorkout) {
+                Text("Start Workout")
+            }
+            .buttonStyle(.borderedProminent)
+        }
+    }
+
+    /// Creates a fresh empty workout and opens it for logging.
+    private func startWorkout() {
+        let workout = Workout(startedAt: .now)
+        modelContext.insert(workout)
+        activeWorkout = workout
+    }
+}
+
+/// A summary row for a workout: date, status, and set/exercise counts.
+private struct WorkoutRow: View {
+    let workout: Workout
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(workout.date, format: .dateTime.weekday().month().day())
+                    .font(.headline)
+                Spacer()
+                if !workout.isFinished {
+                    Text("In Progress")
+                        .font(.caption2.weight(.semibold))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.accentColor.opacity(0.15), in: Capsule())
+                        .foregroundStyle(Color.accentColor)
+                }
+            }
+            Text(summary)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var summary: String {
+        let exerciseCount = workout.exercises.count
+        let setCount = workout.exercises.reduce(0) { $0 + $1.sets.count }
+        let exercises = "\(exerciseCount) exercise\(exerciseCount == 1 ? "" : "s")"
+        let sets = "\(setCount) set\(setCount == 1 ? "" : "s")"
+        return "\(exercises) · \(sets)"
     }
 }
 
 #Preview {
-    NavigationStack {
+    let container = Persistence.inMemoryContainer()
+    ExerciseLibrary.seedIfNeeded(in: container.mainContext)
+    return NavigationStack {
         WorkoutsView()
     }
+    .modelContainer(container)
 }
