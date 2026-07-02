@@ -316,6 +316,9 @@ private struct SetRow: View {
     /// Called when this set transitions into the completed state.
     let onComplete: () -> Void
 
+    /// Drives the per-set plate-calculator sheet.
+    @State private var isShowingPlateCalculator = false
+
     var body: some View {
         HStack(spacing: 12) {
             Button {
@@ -347,6 +350,17 @@ private struct SetRow: View {
             rpeColumn
 
             Button {
+                isShowingPlateCalculator = true
+            } label: {
+                Image(systemName: "circle.grid.2x1.fill")
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Plate calculator")
+            .accessibilityHint("Breaks this weight into plates per side")
+
+            Button {
                 set.completed.toggle()
                 if set.completed { onComplete() }
             } label: {
@@ -356,6 +370,9 @@ private struct SetRow: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(set.completed ? "Completed" : "Not completed")
+        }
+        .sheet(isPresented: $isShowingPlateCalculator) {
+            PlateCalculatorView(initialTarget: set.weight)
         }
     }
 
