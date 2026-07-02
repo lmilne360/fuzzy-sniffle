@@ -16,6 +16,7 @@ enum Persistence {
         Workout.self,
         WorkoutExercise.self,
         SetEntry.self,
+        PersonalRecord.self,
     ])
 
     /// The on-disk container used by the live app. Created once, lazily.

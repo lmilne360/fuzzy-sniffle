@@ -28,6 +28,13 @@ struct RootView: View {
             .tabItem {
                 Label("Routines", systemImage: "list.bullet.rectangle")
             }
+
+            NavigationStack {
+                RecordsView()
+            }
+            .tabItem {
+                Label("Records", systemImage: "trophy")
+            }
         }
         .task {
             // Seed the built-in exercise library once, on first launch.
