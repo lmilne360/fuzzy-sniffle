@@ -14,6 +14,9 @@ struct WorkoutsView: View {
     /// The workout currently presented full-screen for logging.
     @State private var activeWorkout: Workout?
 
+    /// Whether the rest-timer preferences sheet is showing.
+    @State private var isShowingRestSettings = false
+
     var body: some View {
         List {
             if !inProgress.isEmpty {
@@ -52,9 +55,19 @@ struct WorkoutsView: View {
                     Label("Start Workout", systemImage: "plus")
                 }
             }
+            ToolbarItem(placement: .topBarLeading) {
+                Button {
+                    isShowingRestSettings = true
+                } label: {
+                    Label("Rest Timer", systemImage: "timer")
+                }
+            }
         }
         .fullScreenCover(item: $activeWorkout) { workout in
             ActiveWorkoutView(workout: workout)
+        }
+        .sheet(isPresented: $isShowingRestSettings) {
+            RestSettingsView()
         }
     }
 

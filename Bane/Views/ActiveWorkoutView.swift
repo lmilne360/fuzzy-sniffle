@@ -17,6 +17,14 @@ struct ActiveWorkoutView: View {
     @State private var isPickingExercise = false
     @State private var isConfirmingDiscard = false
 
+    /// Drives the between-sets rest countdown surfaced at the bottom of the view.
+    @State private var restTimer = RestTimerController()
+
+    @AppStorage(RestPreferences.defaultSecondsKey)
+    private var defaultRestSeconds = RestPreferences.fallbackSeconds
+    @AppStorage(RestPreferences.autoStartKey)
+    private var autoStartRest = true
+
     var body: some View {
         NavigationStack {
             List {
@@ -26,11 +34,13 @@ struct ActiveWorkoutView: View {
                     ForEach(workout.orderedExercises) { workoutExercise in
                         ExerciseSection(
                             workoutExercise: workoutExercise,
+                            defaultRestSeconds: defaultRestSeconds,
                             onAddSet: { addSet(to: workoutExercise) },
                             onDeleteSets: { offsets in
                                 deleteSets(at: offsets, from: workoutExercise)
                             },
-                            onRemoveExercise: { remove(workoutExercise) }
+                            onRemoveExercise: { remove(workoutExercise) },
+                            onComplete: { startRest(for: workoutExercise) }
                         )
                     }
                 }
@@ -75,8 +85,17 @@ struct ActiveWorkoutView: View {
             } message: {
                 Text("This workout and all its logged sets will be deleted.")
             }
+            .safeAreaInset(edge: .bottom) {
+                if restTimer.isRunning {
+                    RestTimerBar(controller: restTimer)
+                        .transition(.move(edge: .bottom))
+                }
+            }
         }
         .interactiveDismissDisabled()
+        .animation(.snappy, value: restTimer.isRunning)
+        .task { RestNotifications.requestAuthorization() }
+        .onDisappear { restTimer.stop() }
     }
 
     private var emptyState: some View {
@@ -85,6 +104,17 @@ struct ActiveWorkoutView: View {
             systemImage: "dumbbell",
             description: Text("Tap Add Exercise to start logging sets.")
         )
+    }
+
+    // MARK: - Rest timer
+
+    /// Auto-starts the rest countdown when a set is checked complete, using the
+    /// exercise's own override or falling back to the app-wide default. A no-op
+    /// when auto-start is disabled in preferences.
+    private func startRest(for workoutExercise: WorkoutExercise) {
+        guard autoStartRest else { return }
+        let seconds = workoutExercise.exercise?.restDuration ?? defaultRestSeconds
+        restTimer.start(seconds: seconds, exerciseName: workoutExercise.exercise?.name)
     }
 
     // MARK: - Mutations
@@ -184,9 +214,13 @@ private struct WorkoutTimer: View {
 /// add-set control.
 private struct ExerciseSection: View {
     @Bindable var workoutExercise: WorkoutExercise
+    /// App-wide default, shown as the fallback choice in the rest override menu.
+    let defaultRestSeconds: Int
     let onAddSet: () -> Void
     let onDeleteSets: (IndexSet) -> Void
     let onRemoveExercise: () -> Void
+    /// Fired when a set within this exercise is checked complete.
+    let onComplete: () -> Void
 
     var body: some View {
         Section {
@@ -199,7 +233,7 @@ private struct ExerciseSection: View {
             .foregroundStyle(.secondary)
 
             ForEach(workoutExercise.orderedSets) { set in
-                SetRow(set: set)
+                SetRow(set: set, onComplete: onComplete)
             }
             .onDelete(perform: onDeleteSets)
 
@@ -211,6 +245,7 @@ private struct ExerciseSection: View {
             HStack {
                 Text(workoutExercise.exercise?.name ?? "Exercise")
                 Spacer()
+                restMenu
                 Button(role: .destructive, action: onRemoveExercise) {
                     Image(systemName: "trash")
                 }
@@ -218,6 +253,43 @@ private struct ExerciseSection: View {
                 .accessibilityLabel("Remove exercise")
             }
         }
+    }
+
+    /// Per-exercise rest override: pick a preset, or fall back to the app-wide
+    /// default. Writes straight through to the referenced `Exercise`.
+    @ViewBuilder
+    private var restMenu: some View {
+        if let exercise = workoutExercise.exercise {
+            Menu {
+                Picker("Rest", selection: restBinding(for: exercise)) {
+                    Text("Default (\(RestDurations.label(defaultRestSeconds)))")
+                        .tag(Int?.none)
+                    ForEach(RestDurations.presets, id: \.self) { seconds in
+                        Text(RestDurations.label(seconds)).tag(Int?.some(seconds))
+                    }
+                }
+            } label: {
+                Label(restLabel(for: exercise), systemImage: "timer")
+                    .font(.caption)
+                    .labelStyle(.titleAndIcon)
+            }
+            .buttonStyle(.borderless)
+            .textCase(nil)
+            .accessibilityLabel("Rest duration for this exercise")
+        }
+    }
+
+    /// A binding to the exercise's optional rest override for the picker.
+    private func restBinding(for exercise: Exercise) -> Binding<Int?> {
+        Binding(
+            get: { exercise.restDuration },
+            set: { exercise.restDuration = $0 }
+        )
+    }
+
+    /// The header's rest chip: the override if set, otherwise the default.
+    private func restLabel(for exercise: Exercise) -> String {
+        RestDurations.label(exercise.restDuration ?? defaultRestSeconds)
     }
 }
 
@@ -227,6 +299,8 @@ private struct ExerciseSection: View {
 /// tap-to-complete checkmark.
 private struct SetRow: View {
     @Bindable var set: SetEntry
+    /// Called when this set transitions into the completed state.
+    let onComplete: () -> Void
 
     var body: some View {
         HStack(spacing: 12) {
@@ -258,6 +332,7 @@ private struct SetRow: View {
 
             Button {
                 set.completed.toggle()
+                if set.completed { onComplete() }
             } label: {
                 Image(systemName: set.completed ? "checkmark.circle.fill" : "circle")
                     .font(.title2)

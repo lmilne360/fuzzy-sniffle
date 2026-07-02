@@ -17,6 +17,10 @@ final class Exercise {
     var equipment: Equipment
     /// `true` for user-created exercises, `false` for the seeded library.
     var isCustom: Bool
+    /// Per-exercise rest-timer override, in seconds. `nil` falls back to the
+    /// app-wide default (see ``RestTimerController``). Optional so existing
+    /// stores migrate automatically.
+    var restDuration: Int?
 
     init(
         id: UUID = UUID(),
@@ -24,7 +28,8 @@ final class Exercise {
         category: ExerciseCategory,
         primaryMuscle: Muscle,
         equipment: Equipment,
-        isCustom: Bool = false
+        isCustom: Bool = false,
+        restDuration: Int? = nil
     ) {
         self.id = id
         self.name = name
@@ -32,5 +37,6 @@ final class Exercise {
         self.primaryMuscle = primaryMuscle
         self.equipment = equipment
         self.isCustom = isCustom
+        self.restDuration = restDuration
     }
 }
