@@ -16,7 +16,11 @@ struct ExercisesView: View {
             ForEach(sectionedCategories) { category in
                 Section(category.displayName) {
                     ForEach(exercises(in: category)) { exercise in
-                        ExerciseRow(exercise: exercise)
+                        NavigationLink {
+                            ExerciseDetailView(exercise: exercise)
+                        } label: {
+                            ExerciseRow(exercise: exercise)
+                        }
                     }
                 }
             }
