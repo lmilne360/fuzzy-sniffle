@@ -55,6 +55,13 @@ struct RootView: View {
             }
 
             NavigationStack {
+                CalendarView()
+            }
+            .tabItem {
+                Label("Calendar", systemImage: "calendar")
+            }
+
+            NavigationStack {
                 MeasurementsView()
             }
             .tabItem {
