@@ -48,7 +48,8 @@ extension Workout {
 // MARK: - Shared formatting
 
 /// Formatting helpers shared by the history list and detail view so a workout's
-/// duration and volume render identically everywhere.
+/// duration renders identically everywhere. Weight and volume values are
+/// unit-aware and formatted through ``WeightFormat`` instead.
 enum WorkoutFormat {
     /// A compact duration such as `52 min` or `1h 05m`. Returns `nil` when the
     /// session has no measurable duration.
@@ -62,12 +63,6 @@ enum WorkoutFormat {
         }
         return "\(minutes) min"
     }
-
-    /// A grouped, whole-number volume such as `12,340`. Weight is unitless in
-    /// the current model, so no unit suffix is applied.
-    static func volume(_ value: Double) -> String {
-        value.formatted(.number.precision(.fractionLength(0)))
-    }
 }
 
 // MARK: - Detail
@@ -80,6 +75,9 @@ enum WorkoutFormat {
 /// of what happened, editing lives in ``ActiveWorkoutView``.
 struct WorkoutDetailView: View {
     let workout: Workout
+
+    /// The unit the volume total is shown in; storage stays pounds.
+    @AppStorage(WeightPreferences.unitKey) private var weightUnit = WeightPreferences.fallback
 
     var body: some View {
         List {
@@ -104,7 +102,7 @@ struct WorkoutDetailView: View {
                 if let duration = WorkoutFormat.duration(workout.duration) {
                     metric("Duration", duration)
                 }
-                metric("Volume", WorkoutFormat.volume(workout.totalVolume))
+                metric("Volume", WeightFormat.volume(workout.totalVolume, in: weightUnit))
                 metric("Exercises", "\(workout.exercises.count)")
                 metric("Sets", "\(workout.workingSetCount)")
             }
@@ -152,6 +150,9 @@ private struct ExerciseDetailSection: View {
 private struct SetDetailRow: View {
     let set: SetEntry
 
+    /// The unit the set's weight is shown in; storage stays pounds.
+    @AppStorage(WeightPreferences.unitKey) private var weightUnit = WeightPreferences.fallback
+
     var body: some View {
         HStack(spacing: 12) {
             Text(set.isWarmup ? "W" : "\(set.order + 1)")
@@ -164,7 +165,7 @@ private struct SetDetailRow: View {
                 .foregroundStyle(set.isWarmup ? Color.orange : .secondary)
                 .accessibilityLabel(set.isWarmup ? "Warm-up set" : "Set \(set.order + 1)")
 
-            Text("\(set.reps) reps × \(WorkoutFormat.volume(set.weight))")
+            Text("\(set.reps) reps × \(WeightFormat.weight(set.weight, in: weightUnit))")
                 .font(.body.monospacedDigit())
 
             Spacer()

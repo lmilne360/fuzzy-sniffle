@@ -21,6 +21,11 @@ struct PlateCalculatorView: View {
     @AppStorage(PlatePreferences.availablePlatesKey)
     private var availablePlatesRaw = PlatePreferences.encode(PlatePreferences.fallbackPlates)
 
+    /// The unit weights are displayed and entered in. The plate/bar inventory
+    /// stays canonical pounds — the solver and stored denominations are lb; only
+    /// the on-screen numbers convert (ba-w6o).
+    @AppStorage(WeightPreferences.unitKey) private var weightUnit = WeightPreferences.fallback
+
     init(initialTarget: Double) {
         self.initialTarget = initialTarget
         _target = State(initialValue: initialTarget)
@@ -58,9 +63,9 @@ struct PlateCalculatorView: View {
     // MARK: - Sections
 
     private var targetSection: some View {
-        Section("Target weight") {
+        Section("Target weight (\(weightUnit.abbreviation))") {
             HStack {
-                TextField("0", value: $target, format: .number)
+                TextField("0", value: $target.weightDisplay(in: weightUnit), format: .number)
                     .keyboardType(.decimalPad)
                     .font(.title2.monospacedDigit())
                 Stepper(
@@ -78,7 +83,7 @@ struct PlateCalculatorView: View {
         Section("Bar") {
             Picker("Bar weight", selection: $barWeight) {
                 ForEach(PlatePreferences.barPresets, id: \.self) { weight in
-                    Text(weight == 0 ? "None" : Formatting.plate(weight))
+                    Text(weight == 0 ? "None" : WeightFormat.value(weight, in: weightUnit))
                         .tag(weight)
                 }
             }
@@ -91,7 +96,7 @@ struct PlateCalculatorView: View {
         Section("Per side") {
             if loadout.isBelowBar {
                 Label(
-                    "Target is below the \(Formatting.plate(barWeight)) bar.",
+                    "Target is below the \(WeightFormat.weight(barWeight, in: weightUnit)) bar.",
                     systemImage: "exclamationmark.triangle"
                 )
                 .foregroundStyle(.secondary)
@@ -101,7 +106,7 @@ struct PlateCalculatorView: View {
                     .foregroundStyle(.secondary)
                     .font(.callout)
             } else {
-                PlateStackView(placements: loadout.perSide)
+                PlateStackView(placements: loadout.perSide, unit: weightUnit)
                     .padding(.vertical, 4)
 
                 ForEach(loadout.perSide) { placement in
@@ -109,10 +114,10 @@ struct PlateCalculatorView: View {
                         Text("\(placement.count) ×")
                             .foregroundStyle(.secondary)
                             .monospacedDigit()
-                        Text(Formatting.plate(placement.plate))
+                        Text(WeightFormat.value(placement.plate, in: weightUnit))
                             .fontWeight(.medium)
                         Spacer()
-                        Text("\(Formatting.plate(placement.plate * Double(placement.count))) / side")
+                        Text("\(WeightFormat.weight(placement.plate * Double(placement.count), in: weightUnit)) / side")
                             .foregroundStyle(.secondary)
                             .font(.callout.monospacedDigit())
                     }
@@ -121,8 +126,8 @@ struct PlateCalculatorView: View {
 
             if !loadout.isExact && !loadout.isBelowBar {
                 Label(
-                    "Closest with your plates: \(Formatting.plate(loadout.achieved)) "
-                        + "(\(Formatting.plate(loadout.remainder)) short).",
+                    "Closest with your plates: \(WeightFormat.weight(loadout.achieved, in: weightUnit)) "
+                        + "(\(WeightFormat.weight(loadout.remainder, in: weightUnit)) short).",
                     systemImage: "info.circle"
                 )
                 .font(.caption)
@@ -139,7 +144,7 @@ struct PlateCalculatorView: View {
                 HStack {
                     Label("Available plates", systemImage: "slider.horizontal.3")
                     Spacer()
-                    Text(plates.map(Formatting.plate).joined(separator: ", "))
+                    Text(plates.map { WeightFormat.value($0, in: weightUnit) }.joined(separator: ", "))
                         .foregroundStyle(.secondary)
                         .font(.caption)
                         .lineLimit(1)
@@ -161,6 +166,8 @@ struct PlateCalculatorView: View {
 /// glance.
 private struct PlateStackView: View {
     let placements: [PlateCalculator.Placement]
+    /// Unit for the plate labels; the stored denominations remain pounds.
+    let unit: WeightUnit
 
     private var heaviest: Double {
         placements.map(\.plate).max() ?? 1
@@ -190,7 +197,7 @@ private struct PlateStackView: View {
             .fill(Color.accentColor.gradient)
             .frame(width: 14, height: 54 * scale)
             .overlay(
-                Text(Formatting.plate(weight))
+                Text(WeightFormat.value(weight, in: unit))
                     .font(.system(size: 8, weight: .bold))
                     .foregroundStyle(.white)
                     .rotationEffect(.degrees(-90))
@@ -200,7 +207,7 @@ private struct PlateStackView: View {
 
     private var accessibilitySummary: String {
         let parts = placements.map {
-            "\($0.count) times \(Formatting.plate($0.plate))"
+            "\($0.count) times \(WeightFormat.weight($0.plate, in: unit))"
         }
         return "Per side: " + parts.joined(separator: ", ")
     }
@@ -213,6 +220,9 @@ private struct AvailablePlatesEditor: View {
     @Binding var availablePlatesRaw: String
 
     @Environment(\.dismiss) private var dismiss
+
+    /// Unit for the plate labels; the stored denominations remain pounds.
+    @AppStorage(WeightPreferences.unitKey) private var weightUnit = WeightPreferences.fallback
 
     private var selected: Set<Double> {
         Set(PlatePreferences.decode(availablePlatesRaw))
@@ -227,7 +237,7 @@ private struct AvailablePlatesEditor: View {
                             toggle(plate)
                         } label: {
                             HStack {
-                                Text(Formatting.plate(plate))
+                                Text(WeightFormat.weight(plate, in: weightUnit))
                                     .foregroundStyle(.primary)
                                 Spacer()
                                 if selected.contains(plate) {

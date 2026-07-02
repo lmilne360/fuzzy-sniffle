@@ -68,6 +68,9 @@ private struct ExerciseRecordGroup: Identifiable {
 private struct ExerciseRecordRow: View {
     let group: ExerciseRecordGroup
 
+    /// The unit the 1RM headline is shown in; storage stays pounds.
+    @AppStorage(WeightPreferences.unitKey) private var weightUnit = WeightPreferences.fallback
+
     var body: some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
@@ -82,7 +85,7 @@ private struct ExerciseRecordRow: View {
 
             if let oneRepMax = group.estimatedOneRepMax {
                 VStack(alignment: .trailing, spacing: 2) {
-                    Text(WorkoutFormat.volume(oneRepMax.value))
+                    Text(WeightFormat.weight(oneRepMax.value, in: weightUnit))
                         .font(.headline.monospacedDigit())
                     Text("est. 1RM")
                         .font(.caption2)

@@ -16,6 +16,9 @@ struct AddMeasurementView: View {
     @State private var text: [String: String] = [:]
     @State private var notes = ""
 
+    /// The unit bodyweight is entered in; stored back as canonical pounds.
+    @AppStorage(WeightPreferences.unitKey) private var weightUnit = WeightPreferences.fallback
+
     var body: some View {
         Form {
             Section("Date") {
@@ -60,11 +63,17 @@ struct AddMeasurementView: View {
                 .keyboardType(.decimalPad)
                 .multilineTextAlignment(.trailing)
                 .frame(maxWidth: 120)
-            if let unit = spec.unit {
+            if let unit = unitLabel(for: spec) {
                 Text(unit)
                     .foregroundStyle(.secondary)
             }
         }
+    }
+
+    /// The unit suffix shown beside a field: the live weight unit for bodyweight,
+    /// otherwise the spec's own fixed unit (e.g. `%`).
+    private func unitLabel(for spec: MeasurementFieldSpec) -> String? {
+        spec.isWeight ? weightUnit.abbreviation : spec.unit
     }
 
     private func binding(for spec: MeasurementFieldSpec) -> Binding<String> {
@@ -90,7 +99,10 @@ struct AddMeasurementView: View {
     private func save() {
         let measurement = BodyMeasurement(date: date, notes: notes.trimmingCharacters(in: .whitespacesAndNewlines))
         for spec in MeasurementFieldSpec.all {
-            spec.assign(measurement, parsedValue(for: spec))
+            // Bodyweight is entered in the selected unit but stored as canonical pounds.
+            let parsed = parsedValue(for: spec)
+            let value = spec.isWeight ? parsed.map(weightUnit.toPounds) : parsed
+            spec.assign(measurement, value)
         }
         guard !measurement.isEmpty else { return }
         modelContext.insert(measurement)
@@ -104,12 +116,15 @@ struct AddMeasurementView: View {
 struct MeasurementFieldSpec: Identifiable {
     let label: String
     let unit: String?
+    /// Whether this field holds a bodyweight — the one field whose unit follows
+    /// the weight-unit preference and whose value converts to pounds on save.
+    var isWeight = false
     let assign: (BodyMeasurement, Double?) -> Void
 
     var id: String { label }
     var placeholder: String { unit == "%" ? "0.0" : "—" }
 
-    static let weight = MeasurementFieldSpec(label: "Weight", unit: nil) { $0.weight = $1 }
+    static let weight = MeasurementFieldSpec(label: "Weight", unit: nil, isWeight: true) { $0.weight = $1 }
     static let bodyFat = MeasurementFieldSpec(label: "Body Fat", unit: "%") { $0.bodyFatPercentage = $1 }
 
     static let circumferences: [MeasurementFieldSpec] = [

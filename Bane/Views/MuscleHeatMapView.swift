@@ -150,6 +150,9 @@ private struct MuscleVolumeRow: View {
     /// Share of the top muscle's volume, driving the bar width (0...1).
     let fraction: Double
 
+    /// The unit the volume total is shown in; storage stays pounds.
+    @AppStorage(WeightPreferences.unitKey) private var weightUnit = WeightPreferences.fallback
+
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
@@ -159,7 +162,7 @@ private struct MuscleVolumeRow: View {
                 Text(entry.muscle.displayName)
                     .font(.subheadline)
                 Spacer()
-                Text("\(WorkoutFormat.volume(entry.volume)) vol")
+                Text("\(WeightFormat.volume(entry.volume, in: weightUnit)) vol")
                     .font(.subheadline.monospacedDigit())
                     .foregroundStyle(.secondary)
             }

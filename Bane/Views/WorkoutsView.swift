@@ -132,6 +132,9 @@ struct WorkoutsView: View {
 private struct WorkoutRow: View {
     let workout: Workout
 
+    /// The unit volume totals are shown in; storage stays pounds.
+    @AppStorage(WeightPreferences.unitKey) private var weightUnit = WeightPreferences.fallback
+
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
@@ -172,7 +175,7 @@ private struct WorkoutRow: View {
         if let duration = WorkoutFormat.duration(workout.duration) {
             parts.append(duration)
         }
-        parts.append("\(WorkoutFormat.volume(workout.totalVolume)) vol")
+        parts.append("\(WeightFormat.volume(workout.totalVolume, in: weightUnit)) vol")
         parts.append(exercises)
         return parts.joined(separator: " · ")
     }

@@ -57,7 +57,7 @@ final class CSVExporterTests: XCTestCase {
         let csv = CSVExporter.workoutsCSV(from: [])
         XCTAssertEqual(
             csv,
-            "Date,Workout,Exercise,Category,Primary Muscle,Equipment,Set,Reps,Weight,RPE,Warmup,Completed,Volume,Superset"
+            "Date,Workout,Exercise,Category,Primary Muscle,Equipment,Set,Reps,Weight (lb),RPE,Warmup,Completed,Volume (lb),Superset"
         )
     }
 
@@ -117,7 +117,7 @@ final class CSVExporterTests: XCTestCase {
     func testRecordsCSVHasHeaderOnlyWhenNoHistory() {
         let exercise = makeExercise()
         let csv = CSVExporter.recordsCSV(for: [exercise], in: [])
-        XCTAssertEqual(csv, "Exercise,Metric,Value,Reps,Weight,Achieved On")
+        XCTAssertEqual(csv, "Exercise,Metric,Value (lb),Reps,Weight (lb),Achieved On")
     }
 
     func testRecordsCSVEmitsARowPerMetric() {

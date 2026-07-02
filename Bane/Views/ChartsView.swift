@@ -21,6 +21,9 @@ struct ChartsView: View {
     /// a default on first appearance (the first exercise with history).
     @State private var selectedExercise: Exercise?
 
+    /// The unit weight axes are plotted and labeled in; storage stays pounds.
+    @AppStorage(WeightPreferences.unitKey) private var weightUnit = WeightPreferences.fallback
+
     var body: some View {
         ScrollView {
             VStack(spacing: 24) {
@@ -47,7 +50,7 @@ struct ChartsView: View {
                 if series.isEmpty {
                     emptyState("No sets logged yet for this exercise.")
                 } else {
-                    lineChart(series, unitLabel: "Est. 1RM")
+                    lineChart(series, unitLabel: "Est. 1RM (\(weightUnit.abbreviation))")
                 }
             }
         }
@@ -74,11 +77,11 @@ struct ChartsView: View {
                 Chart(series) { point in
                     BarMark(
                         x: .value("Date", point.date, unit: .day),
-                        y: .value("Volume", point.value)
+                        y: .value("Volume", weightUnit.fromPounds(point.value))
                     )
                     .foregroundStyle(Color.accentColor)
                 }
-                .chartYAxisLabel("Volume")
+                .chartYAxisLabel("Volume (\(weightUnit.abbreviation))")
                 .frame(height: 220)
             }
         }
@@ -92,7 +95,7 @@ struct ChartsView: View {
             if series.isEmpty {
                 emptyState("Record a bodyweight measurement on the Body tab to chart it.")
             } else {
-                lineChart(series, unitLabel: "Weight")
+                lineChart(series, unitLabel: "Weight (\(weightUnit.abbreviation))")
             }
         }
     }
@@ -104,14 +107,14 @@ struct ChartsView: View {
         Chart(series) { point in
             LineMark(
                 x: .value("Date", point.date),
-                y: .value(unitLabel, point.value)
+                y: .value(unitLabel, weightUnit.fromPounds(point.value))
             )
             .foregroundStyle(Color.accentColor)
             .interpolationMethod(.catmullRom)
 
             PointMark(
                 x: .value("Date", point.date),
-                y: .value(unitLabel, point.value)
+                y: .value(unitLabel, weightUnit.fromPounds(point.value))
             )
             .foregroundStyle(Color.accentColor)
         }

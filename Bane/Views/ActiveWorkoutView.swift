@@ -563,6 +563,9 @@ private struct SetRow: View {
     /// Called when this set transitions into the completed state.
     let onComplete: () -> Void
 
+    /// The unit weights are displayed and entered in; storage stays pounds.
+    @AppStorage(WeightPreferences.unitKey) private var weightUnit = WeightPreferences.fallback
+
     /// Drives the per-set plate-calculator sheet.
     @State private var isShowingPlateCalculator = false
 
@@ -589,8 +592,8 @@ private struct SetRow: View {
                     .keyboardType(.numberPad)
             }
 
-            fieldColumn(title: "Weight") {
-                TextField("0", value: $set.weight, format: .number)
+            fieldColumn(title: "Weight (\(weightUnit.abbreviation))") {
+                TextField("0", value: $set.weight.weightDisplay(in: weightUnit), format: .number)
                     .keyboardType(.decimalPad)
             }
 

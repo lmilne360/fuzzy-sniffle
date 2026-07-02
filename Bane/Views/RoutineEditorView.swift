@@ -228,6 +228,9 @@ private struct DraftSetRow: View {
     @Binding var set: DraftSet
     let onRemove: () -> Void
 
+    /// The unit target weights are displayed and entered in; storage stays pounds.
+    @AppStorage(WeightPreferences.unitKey) private var weightUnit = WeightPreferences.fallback
+
     var body: some View {
         HStack(spacing: 12) {
             Text("\(number)")
@@ -241,8 +244,8 @@ private struct DraftSetRow: View {
                     .keyboardType(.numberPad)
             }
 
-            fieldColumn(title: "Weight") {
-                TextField("0", value: $set.targetWeight, format: .number)
+            fieldColumn(title: "Weight (\(weightUnit.abbreviation))") {
+                TextField("0", value: $set.targetWeight.weightDisplay(in: weightUnit), format: .number)
                     .keyboardType(.decimalPad)
             }
 

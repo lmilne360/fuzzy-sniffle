@@ -16,6 +16,9 @@ struct MeasurementsView: View {
     @State private var isShowingHealthAlert = false
     @State private var healthAlertMessage = ""
 
+    /// The unit bodyweight is shown in; storage stays pounds.
+    @AppStorage(WeightPreferences.unitKey) private var weightUnit = WeightPreferences.fallback
+
     var body: some View {
         List {
             ForEach(measurements) { measurement in
@@ -95,7 +98,7 @@ struct MeasurementsView: View {
         modelContext.insert(
             BodyMeasurement(date: sample.date, weight: sample.weight, notes: "Imported from Apple Health")
         )
-        healthAlertMessage = "Imported bodyweight of \(MeasurementFormat.value(sample.weight)) from Apple Health."
+        healthAlertMessage = "Imported bodyweight of \(WeightFormat.weight(sample.weight, in: weightUnit)) from Apple Health."
         isShowingHealthAlert = true
     }
     #endif
@@ -122,6 +125,9 @@ enum MeasurementFormat {
 private struct MeasurementRow: View {
     let measurement: BodyMeasurement
 
+    /// The unit bodyweight is shown in; storage stays pounds.
+    @AppStorage(WeightPreferences.unitKey) private var weightUnit = WeightPreferences.fallback
+
     var body: some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
@@ -135,7 +141,7 @@ private struct MeasurementRow: View {
             Spacer()
 
             if let weight = measurement.weight {
-                summaryMetric(MeasurementFormat.value(weight), caption: "weight")
+                summaryMetric(WeightFormat.value(weight, in: weightUnit), caption: "weight (\(weightUnit.abbreviation))")
             }
             if let bodyFat = measurement.bodyFatPercentage {
                 summaryMetric("\(MeasurementFormat.value(bodyFat))%", caption: "body fat")
@@ -158,6 +164,9 @@ private struct MeasurementRow: View {
 /// Full breakdown of a single measurement: every recorded field plus any notes.
 struct MeasurementDetailView: View {
     let measurement: BodyMeasurement
+
+    /// The unit bodyweight is shown in; storage stays pounds.
+    @AppStorage(WeightPreferences.unitKey) private var weightUnit = WeightPreferences.fallback
 
     var body: some View {
         List {
@@ -182,10 +191,14 @@ struct MeasurementDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
     }
 
-    /// Appends a `%` to the body-fat field; other metrics are unitless.
+    /// Formats a metric for display: bodyweight in the selected unit with its
+    /// label, body fat with a `%`, and the remaining circumferences unitless.
     private func displayValue(_ label: String, _ value: Double) -> String {
-        let formatted = MeasurementFormat.value(value)
-        return label == "Body Fat %" ? "\(formatted)%" : formatted
+        switch label {
+        case "Weight": return WeightFormat.weight(value, in: weightUnit)
+        case "Body Fat %": return "\(MeasurementFormat.value(value))%"
+        default: return MeasurementFormat.value(value)
+        }
     }
 }
 

@@ -11,6 +11,10 @@ import Foundation
 /// Records are recomputed live from history via ``PersonalRecordsService`` rather
 /// than read from the persisted ``PersonalRecord`` cache, so an export is correct
 /// even if the user has never opened the Records screen to refresh that cache.
+///
+/// Weight and volume columns are always exported in canonical **pounds**
+/// (regardless of the app's display unit) and labeled `(lb)`, so exports stay
+/// stable and unambiguous (ba-w6o).
 enum CSVExporter {
 
     // MARK: - Field encoding
@@ -59,7 +63,7 @@ enum CSVExporter {
     static func workoutsCSV(from workouts: [Workout]) -> String {
         let header = row([
             "Date", "Workout", "Exercise", "Category", "Primary Muscle", "Equipment",
-            "Set", "Reps", "Weight", "RPE", "Warmup", "Completed", "Volume", "Superset",
+            "Set", "Reps", "Weight (lb)", "RPE", "Warmup", "Completed", "Volume (lb)", "Superset",
         ])
 
         var lines = [header]
@@ -116,7 +120,7 @@ enum CSVExporter {
     /// ordered by exercise name, then by ``PRMetric/allCases`` order. Exercises
     /// with no qualifying history contribute no rows.
     static func recordsCSV(for exercises: [Exercise], in workouts: [Workout]) -> String {
-        let header = row(["Exercise", "Metric", "Value", "Reps", "Weight", "Achieved On"])
+        let header = row(["Exercise", "Metric", "Value (lb)", "Reps", "Weight (lb)", "Achieved On"])
 
         var lines = [header]
         for exercise in exercises.sorted(by: { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }) {

@@ -78,6 +78,9 @@ struct PersonalRecordRow: View {
     /// metric name (per-exercise detail).
     var showsExerciseName = false
 
+    /// The unit record weights are shown in; storage stays pounds.
+    @AppStorage(WeightPreferences.unitKey) private var weightUnit = WeightPreferences.fallback
+
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: record.metric.systemImage)
@@ -90,20 +93,20 @@ struct PersonalRecordRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(showsExerciseName ? (record.exercise?.name ?? "Exercise") : record.metric.displayName)
                     .font(.body.weight(.medium))
-                Text("\(record.reps) reps × \(WorkoutFormat.volume(record.weight)) · \(record.achievedOn.formatted(.dateTime.month().day().year()))")
+                Text("\(record.reps) reps × \(WeightFormat.weight(record.weight, in: weightUnit)) · \(record.achievedOn.formatted(.dateTime.month().day().year()))")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
             Spacer()
 
-            Text(WorkoutFormat.volume(record.value))
+            Text(WeightFormat.weight(record.value, in: weightUnit))
                 .font(.title3.weight(.semibold).monospacedDigit())
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(
-            "\(record.metric.displayName): \(WorkoutFormat.volume(record.value)), "
-                + "\(record.reps) reps at \(WorkoutFormat.volume(record.weight))"
+            "\(record.metric.displayName): \(WeightFormat.weight(record.value, in: weightUnit)), "
+                + "\(record.reps) reps at \(WeightFormat.weight(record.weight, in: weightUnit))"
         )
     }
 }
