@@ -7,11 +7,19 @@ import SwiftUI
 /// opens the editor for a new one. Both are presented modally so the editor's
 /// `Cancel`/`Save` semantics are consistent. Swipe-to-delete removes a routine
 /// (its items cascade away with it).
+///
+/// A leading swipe action (and a matching context-menu item) **starts a
+/// workout** from the routine: it builds a pre-populated in-progress `Workout`
+/// and presents ``ActiveWorkoutView`` for logging — the tie-in between saved
+/// templates and the core logging loop (ba-32q.8).
 struct RoutinesView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \Routine.createdAt, order: .reverse) private var routines: [Routine]
 
     @State private var activeSheet: ActiveSheet?
+
+    /// The workout currently presented full-screen for logging, if any.
+    @State private var activeWorkout: Workout?
 
     var body: some View {
         List {
@@ -22,6 +30,26 @@ struct RoutinesView: View {
                     RoutineRow(routine: routine)
                 }
                 .buttonStyle(.plain)
+                .swipeActions(edge: .leading) {
+                    Button {
+                        start(routine)
+                    } label: {
+                        Label("Start", systemImage: "play.fill")
+                    }
+                    .tint(.green)
+                }
+                .contextMenu {
+                    Button {
+                        start(routine)
+                    } label: {
+                        Label("Start Workout", systemImage: "play.fill")
+                    }
+                    Button {
+                        activeSheet = .edit(routine)
+                    } label: {
+                        Label("Edit Routine", systemImage: "pencil")
+                    }
+                }
             }
             .onDelete(perform: delete)
         }
@@ -50,6 +78,16 @@ struct RoutinesView: View {
                 }
             }
         }
+        .fullScreenCover(item: $activeWorkout) { workout in
+            ActiveWorkoutView(workout: workout)
+        }
+    }
+
+    /// Builds a pre-populated workout from the routine and opens it for logging.
+    private func start(_ routine: Routine) {
+        let workout = Workout.from(routine: routine)
+        modelContext.insert(workout)
+        activeWorkout = workout
     }
 
     private func delete(at offsets: IndexSet) {
