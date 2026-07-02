@@ -4,10 +4,26 @@ import SwiftUI
 /// the active workout, and previews all agree on the storage contract.
 enum RestPreferences {
     static let defaultSecondsKey = "restDefaultSeconds"
+    static let warmupSecondsKey = "restWarmupSeconds"
     static let autoStartKey = "restAutoStart"
 
-    /// The out-of-box rest length before the user customises it.
+    /// The out-of-box working-set rest length before the user customises it.
     static let fallbackSeconds = 90
+    /// The out-of-box warm-up rest length — shorter, as warm-ups rest less.
+    static let fallbackWarmupSeconds = 60
+
+    /// The rest countdown for a completed set. A per-exercise override wins over
+    /// everything; otherwise warm-up sets rest for `warmupDefault` and working
+    /// sets for `workingDefault`.
+    static func restDuration(
+        isWarmup: Bool,
+        exerciseOverride: Int?,
+        workingDefault: Int,
+        warmupDefault: Int
+    ) -> Int {
+        if let exerciseOverride { return exerciseOverride }
+        return isWarmup ? warmupDefault : workingDefault
+    }
 }
 
 /// Rest-timer preferences: the app-wide default duration used when an exercise
@@ -17,6 +33,8 @@ enum RestPreferences {
 struct RestSettingsView: View {
     @AppStorage(RestPreferences.defaultSecondsKey)
     private var defaultSeconds = RestPreferences.fallbackSeconds
+    @AppStorage(RestPreferences.warmupSecondsKey)
+    private var warmupSeconds = RestPreferences.fallbackWarmupSeconds
     @AppStorage(RestPreferences.autoStartKey)
     private var autoStart = true
 
@@ -42,7 +60,21 @@ struct RestSettingsView: View {
                 } header: {
                     Text("Default rest")
                 } footer: {
-                    Text("Used for exercises without their own rest override.")
+                    Text("Used for working sets on exercises without their own rest override.")
+                }
+
+                Section {
+                    Picker("Duration", selection: $warmupSeconds) {
+                        ForEach(RestDurations.presets, id: \.self) { seconds in
+                            Text(RestDurations.label(seconds)).tag(seconds)
+                        }
+                    }
+                    .pickerStyle(.inline)
+                    .labelsHidden()
+                } header: {
+                    Text("Warm-up rest")
+                } footer: {
+                    Text("Used for warm-up sets without their own rest override.")
                 }
             }
             .navigationTitle("Rest Timer")

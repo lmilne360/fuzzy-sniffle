@@ -15,6 +15,32 @@ enum RPEScale {
     }
 }
 
+/// Insertion of a single manually-added warm-up set into an exercise.
+///
+/// Extracted from the view so the ordering contract — warm-ups lead, the new
+/// row tails the existing warm-up block, working sets renumber to follow — is
+/// unit-testable against SwiftData models.
+enum ManualWarmup {
+    /// Appends a blank warm-up set to `workoutExercise`, ordered at the tail of
+    /// the warm-up block (ahead of the working sets), and renumbers the working
+    /// sets to follow. Returns the newly inserted set.
+    @discardableResult
+    static func insert(into workoutExercise: WorkoutExercise) -> SetEntry {
+        let warmups = workoutExercise.orderedSets.filter(\.isWarmup)
+        let workingSets = workoutExercise.orderedSets.filter { !$0.isWarmup }
+
+        let newWarmup = SetEntry(order: warmups.count, isWarmup: true)
+        newWarmup.workoutExercise = workoutExercise
+        workoutExercise.sets.append(newWarmup)
+
+        // Warm-ups lead; working sets follow the (now larger) warm-up block.
+        for (offset, set) in workingSets.enumerated() {
+            set.order = warmups.count + 1 + offset
+        }
+        return newWarmup
+    }
+}
+
 /// The active workout-logging surface: the core loop of the app.
 ///
 /// Drives a single in-progress `Workout` — add exercises from the library, log
@@ -36,6 +62,8 @@ struct ActiveWorkoutView: View {
 
     @AppStorage(RestPreferences.defaultSecondsKey)
     private var defaultRestSeconds = RestPreferences.fallbackSeconds
+    @AppStorage(RestPreferences.warmupSecondsKey)
+    private var warmupRestSeconds = RestPreferences.fallbackWarmupSeconds
     @AppStorage(RestPreferences.autoStartKey)
     private var autoStartRest = true
 
@@ -51,11 +79,12 @@ struct ActiveWorkoutView: View {
                             defaultRestSeconds: defaultRestSeconds,
                             superset: superset(for: workoutExercise),
                             onAddSet: { addSet(to: workoutExercise) },
+                            onAddWarmupSet: { addWarmupSet(to: workoutExercise) },
                             onDeleteSets: { offsets in
                                 deleteSets(at: offsets, from: workoutExercise)
                             },
                             onRemoveExercise: { remove(workoutExercise) },
-                            onComplete: { startRest(for: workoutExercise) },
+                            onComplete: { set in startRest(for: workoutExercise, set: set) },
                             onAddWarmups: { warmups in
                                 addWarmupSets(warmups, to: workoutExercise)
                             },
@@ -132,12 +161,17 @@ struct ActiveWorkoutView: View {
 
     // MARK: - Rest timer
 
-    /// Auto-starts the rest countdown when a set is checked complete, using the
-    /// exercise's own override or falling back to the app-wide default. A no-op
-    /// when auto-start is disabled in preferences.
-    private func startRest(for workoutExercise: WorkoutExercise) {
+    /// Auto-starts the rest countdown when a set is checked complete. A
+    /// per-exercise override wins; otherwise warm-up sets use the warm-up default
+    /// and working sets the working default. A no-op when auto-start is disabled.
+    private func startRest(for workoutExercise: WorkoutExercise, set: SetEntry) {
         guard autoStartRest else { return }
-        let seconds = workoutExercise.exercise?.restDuration ?? defaultRestSeconds
+        let seconds = RestPreferences.restDuration(
+            isWarmup: set.isWarmup,
+            exerciseOverride: workoutExercise.exercise?.restDuration,
+            workingDefault: defaultRestSeconds,
+            warmupDefault: warmupRestSeconds
+        )
         restTimer.start(seconds: seconds, exerciseName: workoutExercise.exercise?.name)
     }
 
@@ -200,6 +234,13 @@ struct ActiveWorkoutView: View {
         for (offset, set) in workingSets.enumerated() {
             set.order = newWarmups.count + offset
         }
+    }
+
+    /// Inserts a single blank warm-up set ahead of the working sets, renumbering
+    /// so warm-ups lead. The new row is an ordinary editable set (reps/weight)
+    /// flagged `isWarmup`, tailing any existing warm-ups.
+    private func addWarmupSet(to workoutExercise: WorkoutExercise) {
+        ManualWarmup.insert(into: workoutExercise)
     }
 
     private func deleteSets(at offsets: IndexSet, from workoutExercise: WorkoutExercise) {
@@ -379,10 +420,12 @@ private struct ExerciseSection: View {
     /// Superset placement for this exercise, or `nil` when it stands alone.
     let superset: SupersetContext?
     let onAddSet: () -> Void
+    /// Inserts a single blank warm-up set ahead of the working sets.
+    let onAddWarmupSet: () -> Void
     let onDeleteSets: (IndexSet) -> Void
     let onRemoveExercise: () -> Void
-    /// Fired when a set within this exercise is checked complete.
-    let onComplete: () -> Void
+    /// Fired with the set that was just checked complete.
+    let onComplete: (SetEntry) -> Void
     /// Prepends a freshly calculated warm-up ladder to this exercise.
     let onAddWarmups: ([WarmupCalculator.WarmupSet]) -> Void
     /// Links this exercise with the one below into a superset. `nil` when there
@@ -411,6 +454,11 @@ private struct ExerciseSection: View {
 
             Button(action: onAddSet) {
                 Label("Add Set", systemImage: "plus")
+                    .font(.callout)
+            }
+
+            Button(action: onAddWarmupSet) {
+                Label("Add Warm-up Set", systemImage: "flame")
                     .font(.callout)
             }
         } header: {
@@ -560,8 +608,8 @@ private struct ExerciseSection: View {
 /// tap-to-complete checkmark.
 private struct SetRow: View {
     @Bindable var set: SetEntry
-    /// Called when this set transitions into the completed state.
-    let onComplete: () -> Void
+    /// Called with this set when it transitions into the completed state.
+    let onComplete: (SetEntry) -> Void
 
     /// The unit weights are displayed and entered in; storage stays pounds.
     @AppStorage(WeightPreferences.unitKey) private var weightUnit = WeightPreferences.fallback
@@ -612,7 +660,7 @@ private struct SetRow: View {
 
             Button {
                 set.completed.toggle()
-                if set.completed { onComplete() }
+                if set.completed { onComplete(set) }
             } label: {
                 Image(systemName: set.completed ? "checkmark.circle.fill" : "circle")
                     .font(.title2)
