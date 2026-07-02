@@ -45,19 +45,19 @@ enum PRMetric: String, Codable, CaseIterable, Identifiable, Sendable {
 /// it, and the next refresh prunes the orphaned record.
 @Model
 final class PersonalRecord {
-    @Attribute(.unique) var id: UUID
+    var id: UUID = UUID()
     /// Which metric this row records.
-    var metric: PRMetric
+    var metric: PRMetric = PRMetric.heaviestWeight
     /// The metric's value — weight, estimated 1RM, or set volume depending on
     /// ``metric``. Unitless, mirroring the rest of the data model.
-    var value: Double
+    var value: Double = 0
     /// Reps of the set that achieved the record.
-    var reps: Int
+    var reps: Int = 0
     /// Weight of the set that achieved the record.
-    var weight: Double
+    var weight: Double = 0
     /// The workout date on which the record was set.
-    var achievedOn: Date
-    /// The exercise the record belongs to.
+    var achievedOn: Date = Date.now
+    /// The exercise the record belongs to. Inverse of ``Exercise/personalRecords``.
     var exercise: Exercise?
 
     init(

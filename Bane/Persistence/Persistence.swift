@@ -33,16 +33,51 @@ enum Persistence {
 
     @MainActor
     private static func makeContainer(inMemory: Bool) -> ModelContainer {
-        let configuration = ModelConfiguration(
-            schema: schema,
-            isStoredInMemoryOnly: inMemory
-        )
+        // On disk, honour the user's iCloud-sync opt-in (ba-07l.12). In-memory
+        // containers (previews/tests) never sync.
+        let cloudKitEnabled = !inMemory && SyncPreferences.isEnabled
+
+        if cloudKitEnabled {
+            // Try the CloudKit-backed store first, then degrade to a local store
+            // if iCloud is unavailable (no account, missing entitlement) so the
+            // app still launches with on-device data instead of crashing.
+            if let container = try? ModelContainer(
+                for: schema,
+                configurations: [configuration(inMemory: false, cloudKit: true)]
+            ) {
+                return container
+            }
+        }
+
         do {
-            return try ModelContainer(for: schema, configurations: [configuration])
+            return try ModelContainer(
+                for: schema,
+                configurations: [configuration(inMemory: inMemory, cloudKit: false)]
+            )
         } catch {
             // A failure here means the schema is invalid or the store is
             // unreadable/incompatible — both are unrecoverable at launch.
             fatalError("Failed to create ModelContainer: \(error)")
         }
+    }
+
+    /// Builds a `ModelConfiguration`, opting into the CloudKit private database
+    /// only when `cloudKit` is `true`. All `@Model` types must be
+    /// CloudKit-compatible (no unique constraints, optional relationships,
+    /// defaulted attributes) for the CloudKit configuration to be valid.
+    @MainActor
+    private static func configuration(inMemory: Bool, cloudKit: Bool) -> ModelConfiguration {
+        if cloudKit {
+            return ModelConfiguration(
+                schema: schema,
+                isStoredInMemoryOnly: false,
+                cloudKitDatabase: .private(SyncPreferences.containerIdentifier)
+            )
+        }
+        return ModelConfiguration(
+            schema: schema,
+            isStoredInMemoryOnly: inMemory,
+            cloudKitDatabase: .none
+        )
     }
 }

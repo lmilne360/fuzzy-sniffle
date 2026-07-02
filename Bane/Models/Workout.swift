@@ -8,14 +8,24 @@ import SwiftData
 /// `finishedAt` is `nil`.
 @Model
 final class Workout {
-    @Attribute(.unique) var id: UUID
-    var date: Date
+    var id: UUID = UUID()
+    var date: Date = Date.now
     var startedAt: Date?
     var finishedAt: Date?
 
     /// Owned children, ordered by `WorkoutExercise.order` (see ``orderedExercises``).
+    ///
+    /// CloudKit requires to-many relationships to be optional, so the persisted
+    /// storage is a private optional backing property; ``exercises`` is a
+    /// non-optional facade over it that preserves every existing call site
+    /// (reads, assignment, and `.append`) unchanged (ba-07l.12).
     @Relationship(deleteRule: .cascade, inverse: \WorkoutExercise.workout)
-    var exercises: [WorkoutExercise]
+    private var storedExercises: [WorkoutExercise]?
+
+    var exercises: [WorkoutExercise] {
+        get { storedExercises ?? [] }
+        set { storedExercises = newValue }
+    }
 
     init(
         id: UUID = UUID(),
@@ -28,7 +38,7 @@ final class Workout {
         self.date = date
         self.startedAt = startedAt
         self.finishedAt = finishedAt
-        self.exercises = exercises
+        self.storedExercises = exercises
     }
 
     /// Exercises in their intended display order.
@@ -63,11 +73,11 @@ final class Workout {
 /// An exercise performed within a `Workout`, holding its ordered set entries.
 @Model
 final class WorkoutExercise {
-    @Attribute(.unique) var id: UUID
+    var id: UUID = UUID()
     /// Position within the parent workout (ascending).
-    var order: Int
+    var order: Int = 0
     /// Free-form notes the user records for this exercise during the workout.
-    var notes: String
+    var notes: String = ""
     /// Identifies the superset this exercise belongs to. Exercises sharing the
     /// same non-`nil` id are performed as a superset — the user alternates
     /// between them. `nil` means the exercise stands on its own. Optional so it
@@ -80,8 +90,16 @@ final class WorkoutExercise {
     var workout: Workout?
 
     /// Owned children, ordered by `SetEntry.order` (see ``orderedSets``).
+    ///
+    /// Optional backing + non-optional facade for CloudKit compatibility — see
+    /// ``Workout/exercises`` for the rationale (ba-07l.12).
     @Relationship(deleteRule: .cascade, inverse: \SetEntry.workoutExercise)
-    var sets: [SetEntry]
+    private var storedSets: [SetEntry]?
+
+    var sets: [SetEntry] {
+        get { storedSets ?? [] }
+        set { storedSets = newValue }
+    }
 
     init(
         id: UUID = UUID(),
@@ -96,7 +114,7 @@ final class WorkoutExercise {
         self.notes = notes
         self.exercise = exercise
         self.supersetGroup = supersetGroup
-        self.sets = sets
+        self.storedSets = sets
     }
 
     /// Sets in their intended display order.
@@ -112,16 +130,16 @@ final class WorkoutExercise {
 /// performed, plus flags for completion and warm-up status.
 @Model
 final class SetEntry {
-    @Attribute(.unique) var id: UUID
+    var id: UUID = UUID()
     /// Position within the parent exercise (ascending).
-    var order: Int
-    var reps: Int
+    var order: Int = 0
+    var reps: Int = 0
     /// Weight in the user's preferred unit (unit handling lives in the UI layer).
-    var weight: Double
+    var weight: Double = 0
     /// `true` once the user has checked the set off during the workout.
-    var completed: Bool
+    var completed: Bool = false
     /// Warm-up sets are excluded from working-set totals and PRs.
-    var isWarmup: Bool
+    var isWarmup: Bool = false
     /// Rate of Perceived Exertion for the set (typically 6–10 in 0.5 steps).
     /// Optional — defaults to `nil` so it stays migration-safe for existing sets.
     var rpe: Double?

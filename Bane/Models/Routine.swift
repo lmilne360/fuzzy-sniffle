@@ -6,15 +6,25 @@ import SwiftData
 /// copies these items and their per-set targets into a `Workout`.
 @Model
 final class Routine {
-    @Attribute(.unique) var id: UUID
-    var name: String
-    var createdAt: Date
+    var id: UUID = UUID()
+    var name: String = ""
+    var createdAt: Date = Date.now
 
     /// Owned children. `RoutineItem.order` defines display order — SwiftData
     /// does not guarantee to-many relationship ordering, so read via
     /// ``orderedItems``.
+    ///
+    /// CloudKit requires to-many relationships to be optional, so the persisted
+    /// storage is a private optional backing property; ``items`` is a
+    /// non-optional facade over it that keeps every call site unchanged
+    /// (ba-07l.12).
     @Relationship(deleteRule: .cascade, inverse: \RoutineItem.routine)
-    var items: [RoutineItem]
+    private var storedItems: [RoutineItem]?
+
+    var items: [RoutineItem] {
+        get { storedItems ?? [] }
+        set { storedItems = newValue }
+    }
 
     init(
         id: UUID = UUID(),
@@ -25,7 +35,7 @@ final class Routine {
         self.id = id
         self.name = name
         self.createdAt = createdAt
-        self.items = items
+        self.storedItems = items
     }
 
     /// Items in their intended display order.
@@ -38,9 +48,9 @@ final class Routine {
 /// it sits in the ordered list.
 @Model
 final class RoutineItem {
-    @Attribute(.unique) var id: UUID
+    var id: UUID = UUID()
     /// Position within the parent routine (ascending).
-    var order: Int
+    var order: Int = 0
     /// Referenced exercise. Optional so a deleted exercise nullifies rather
     /// than cascading through the routine.
     var exercise: Exercise?
@@ -48,10 +58,17 @@ final class RoutineItem {
     var routine: Routine?
 
     /// Owned target sets. `RoutineSet.order` defines display order — read via
-    /// ``orderedSets``. Defaults empty, which keeps the schema change a
-    /// lightweight SwiftData migration.
+    /// ``orderedSets``.
+    ///
+    /// Optional backing + non-optional facade for CloudKit compatibility — see
+    /// ``Routine/items`` for the rationale (ba-07l.12).
     @Relationship(deleteRule: .cascade, inverse: \RoutineSet.routineItem)
-    var sets: [RoutineSet]
+    private var storedSets: [RoutineSet]?
+
+    var sets: [RoutineSet] {
+        get { storedSets ?? [] }
+        set { storedSets = newValue }
+    }
 
     init(
         id: UUID = UUID(),
@@ -62,7 +79,7 @@ final class RoutineItem {
         self.id = id
         self.order = order
         self.exercise = exercise
-        self.sets = sets
+        self.storedSets = sets
     }
 
     /// Target sets in their intended display order.
@@ -76,14 +93,14 @@ final class RoutineItem {
 /// the routine seeds each `SetEntry` from these targets.
 @Model
 final class RoutineSet {
-    @Attribute(.unique) var id: UUID
+    var id: UUID = UUID()
     /// Position within the parent item (ascending).
-    var order: Int
+    var order: Int = 0
     /// Planned repetitions for this set.
-    var targetReps: Int
+    var targetReps: Int = 0
     /// Planned weight in the user's preferred unit (unit handling lives in the
     /// UI layer, matching `SetEntry`).
-    var targetWeight: Double
+    var targetWeight: Double = 0
     /// Inverse of ``RoutineItem/sets``.
     var routineItem: RoutineItem?
 

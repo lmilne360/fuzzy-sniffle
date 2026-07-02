@@ -11,9 +11,9 @@ import SwiftData
 /// convention as `SetEntry.weight`.
 @Model
 final class BodyMeasurement {
-    @Attribute(.unique) var id: UUID
+    var id: UUID = UUID()
     /// The day the measurement was taken; also the primary sort/grouping key.
-    var date: Date
+    var date: Date = Date.now
 
     /// Bodyweight, in the user's preferred unit.
     var weight: Double?
@@ -36,7 +36,7 @@ final class BodyMeasurement {
     var rightCalf: Double?
 
     /// Free-form note for the entry (conditions, measurement caveats, etc.).
-    var notes: String
+    var notes: String = ""
 
     init(
         id: UUID = UUID(),

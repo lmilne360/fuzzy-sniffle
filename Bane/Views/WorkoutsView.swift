@@ -20,6 +20,9 @@ struct WorkoutsView: View {
     /// Whether the CSV data-export sheet is showing.
     @State private var isShowingExport = false
 
+    /// Whether the iCloud-sync preferences sheet is showing.
+    @State private var isShowingSyncSettings = false
+
     var body: some View {
         List {
             if !inProgress.isEmpty {
@@ -72,6 +75,13 @@ struct WorkoutsView: View {
                     Label("Export Data", systemImage: "square.and.arrow.up")
                 }
             }
+            ToolbarItem(placement: .topBarLeading) {
+                Button {
+                    isShowingSyncSettings = true
+                } label: {
+                    Label("iCloud Sync", systemImage: "icloud")
+                }
+            }
         }
         .fullScreenCover(item: $activeWorkout) { workout in
             ActiveWorkoutView(workout: workout)
@@ -81,6 +91,9 @@ struct WorkoutsView: View {
         }
         .sheet(isPresented: $isShowingExport) {
             DataExportView()
+        }
+        .sheet(isPresented: $isShowingSyncSettings) {
+            SyncSettingsView()
         }
     }
 

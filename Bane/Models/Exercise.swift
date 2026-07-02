@@ -10,13 +10,18 @@ import SwiftData
 @Model
 final class Exercise {
     /// Stable identity, useful for seeding idempotently and for diffing in views.
-    @Attribute(.unique) var id: UUID
-    var name: String
-    var category: ExerciseCategory
-    var primaryMuscle: Muscle
-    var equipment: Equipment
+    ///
+    /// Not `@Attribute(.unique)`: CloudKit-backed stores forbid unique
+    /// constraints, so uniqueness is enforced logically instead — library
+    /// seeding is gated on an existing-count check (see ``ExerciseLibrary``).
+    /// The inline default keeps the attribute CloudKit-valid (ba-07l.12).
+    var id: UUID = UUID()
+    var name: String = ""
+    var category: ExerciseCategory = ExerciseCategory.other
+    var primaryMuscle: Muscle = Muscle.other
+    var equipment: Equipment = Equipment.other
     /// `true` for user-created exercises, `false` for the seeded library.
-    var isCustom: Bool
+    var isCustom: Bool = false
     /// Per-exercise rest-timer override, in seconds. `nil` falls back to the
     /// app-wide default (see ``RestTimerController``). Optional so existing
     /// stores migrate automatically.
@@ -34,6 +39,13 @@ final class Exercise {
     /// on delete, preserving workout history (ba-dw3).
     @Relationship(deleteRule: .nullify, inverse: \WorkoutExercise.exercise)
     var workoutExercises: [WorkoutExercise] = []
+
+    /// Back-references from cached personal records for this exercise. Declared
+    /// so SwiftData tracks the inverse (CloudKit requires every relationship to
+    /// have one) and nullifies each `PersonalRecord.exercise` on delete; the
+    /// next refresh prunes the orphaned record (ba-07l.12).
+    @Relationship(deleteRule: .nullify, inverse: \PersonalRecord.exercise)
+    var personalRecords: [PersonalRecord] = []
 
     init(
         id: UUID = UUID(),
