@@ -46,6 +46,8 @@ final class WorkoutExercise {
     @Attribute(.unique) var id: UUID
     /// Position within the parent workout (ascending).
     var order: Int
+    /// Free-form notes the user records for this exercise during the workout.
+    var notes: String
     /// Referenced exercise. Optional so a deleted exercise nullifies rather
     /// than cascading through workout history.
     var exercise: Exercise?
@@ -59,11 +61,13 @@ final class WorkoutExercise {
     init(
         id: UUID = UUID(),
         order: Int,
+        notes: String = "",
         exercise: Exercise? = nil,
         sets: [SetEntry] = []
     ) {
         self.id = id
         self.order = order
+        self.notes = notes
         self.exercise = exercise
         self.sets = sets
     }

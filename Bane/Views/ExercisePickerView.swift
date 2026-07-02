@@ -1,12 +1,12 @@
 import SwiftData
 import SwiftUI
 
-/// A modal picker for choosing an exercise from the library to add to a
-/// routine.
+/// A modal picker for choosing an exercise from the library.
 ///
 /// Mirrors ``ExercisesView``'s grouped, searchable browsing but is
 /// selection-oriented: tapping a row invokes ``onSelect`` and dismisses. The
-/// caller owns what happens with the chosen exercise.
+/// caller owns what happens with the chosen exercise — appending a
+/// `WorkoutExercise` to an active workout, a `RoutineItem` to a routine, etc.
 struct ExercisePickerView: View {
     @Query(sort: \Exercise.name) private var exercises: [Exercise]
     @Environment(\.dismiss) private var dismiss
@@ -54,6 +54,8 @@ struct ExercisePickerView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
     }
 
     /// Exercises matching the current search text (name, category, muscle, or
