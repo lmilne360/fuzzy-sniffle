@@ -41,6 +41,13 @@ struct RootView: View {
             }
 
             NavigationStack {
+                ChartsView()
+            }
+            .tabItem {
+                Label("Charts", systemImage: "chart.xyaxis.line")
+            }
+
+            NavigationStack {
                 MuscleHeatMapView()
             }
             .tabItem {
