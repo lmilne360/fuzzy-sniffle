@@ -1,11 +1,12 @@
 import SwiftData
 import SwiftUI
 
-/// The Workouts tab: the entry point to the core logging loop.
+/// The Workouts tab: the entry point to the core logging loop and workout history.
 ///
 /// Starts a new empty workout (or resumes an in-progress one) and presents
-/// ``ActiveWorkoutView``. Finished sessions are listed here as a lightweight
-/// history; the richer history experience lands in a later bead (ba-32q.6).
+/// ``ActiveWorkoutView``. Finished sessions are listed as history — each row
+/// summarizes the session and taps through to ``WorkoutDetailView`` for a full
+/// breakdown of every exercise and logged set.
 struct WorkoutsView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \Workout.date, order: .reverse) private var workouts: [Workout]
@@ -30,7 +31,11 @@ struct WorkoutsView: View {
             if !finished.isEmpty {
                 Section("History") {
                     ForEach(finished) { workout in
-                        WorkoutRow(workout: workout)
+                        NavigationLink {
+                            WorkoutDetailView(workout: workout)
+                        } label: {
+                            WorkoutRow(workout: workout)
+                        }
                     }
                 }
             }
@@ -82,14 +87,16 @@ struct WorkoutsView: View {
     }
 }
 
-/// A summary row for a workout: date, status, and set/exercise counts.
+/// A summary row for a workout: name, date, and — for finished sessions —
+/// duration, total volume, and exercise count. In-progress sessions show a
+/// badge and a lighter set/exercise summary instead.
 private struct WorkoutRow: View {
     let workout: Workout
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                Text(workout.date, format: .dateTime.weekday().month().day())
+                Text(workout.displayName)
                     .font(.headline)
                 Spacer()
                 if !workout.isFinished {
@@ -101,18 +108,34 @@ private struct WorkoutRow: View {
                         .foregroundStyle(Color.accentColor)
                 }
             }
+            Text(workout.date, format: .dateTime.weekday().month().day())
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
             Text(summary)
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
     }
 
+    /// A `·`-separated summary. Finished sessions lead with duration and total
+    /// volume; in-progress sessions fall back to a raw set count.
     private var summary: String {
         let exerciseCount = workout.exercises.count
-        let setCount = workout.exercises.reduce(0) { $0 + $1.sets.count }
         let exercises = "\(exerciseCount) exercise\(exerciseCount == 1 ? "" : "s")"
-        let sets = "\(setCount) set\(setCount == 1 ? "" : "s")"
-        return "\(exercises) · \(sets)"
+
+        guard workout.isFinished else {
+            let setCount = workout.exercises.reduce(0) { $0 + $1.sets.count }
+            let sets = "\(setCount) set\(setCount == 1 ? "" : "s")"
+            return "\(exercises) · \(sets)"
+        }
+
+        var parts: [String] = []
+        if let duration = WorkoutFormat.duration(workout.duration) {
+            parts.append(duration)
+        }
+        parts.append("\(WorkoutFormat.volume(workout.totalVolume)) vol")
+        parts.append(exercises)
+        return parts.joined(separator: " · ")
     }
 }
 
