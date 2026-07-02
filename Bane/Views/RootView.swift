@@ -46,6 +46,13 @@ struct RootView: View {
             .tabItem {
                 Label("Muscles", systemImage: "flame")
             }
+
+            NavigationStack {
+                MeasurementsView()
+            }
+            .tabItem {
+                Label("Body", systemImage: "ruler")
+            }
         }
         .task {
             // Seed the built-in exercise library once, on first launch.

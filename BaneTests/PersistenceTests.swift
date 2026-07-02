@@ -220,4 +220,66 @@ final class PersistenceTests: XCTestCase {
 
         XCTAssertEqual(exercise.orderedSets.map(\.order), [0, 1, 2])
     }
+
+    // MARK: - Body measurements (ba-07l.3)
+
+    /// A body measurement must round-trip through the container, preserving both
+    /// the values that were set and the `nil`s for those that were not.
+    func testBodyMeasurementRoundTrips() throws {
+        let measurement = BodyMeasurement(
+            date: .now,
+            weight: 181.4,
+            bodyFatPercentage: 17.2,
+            chest: 42,
+            waist: 33,
+            notes: "morning, fasted"
+        )
+        context.insert(measurement)
+        try context.save()
+
+        let fetched = try XCTUnwrap(try context.fetch(FetchDescriptor<BodyMeasurement>()).first)
+        XCTAssertEqual(fetched.weight, 181.4)
+        XCTAssertEqual(fetched.bodyFatPercentage, 17.2)
+        XCTAssertEqual(fetched.chest, 42)
+        XCTAssertEqual(fetched.waist, 33)
+        XCTAssertEqual(fetched.notes, "morning, fasted")
+        XCTAssertNil(fetched.hips, "Fields left unset must persist as nil")
+        XCTAssertNil(fetched.leftArm)
+    }
+
+    /// `isEmpty` distinguishes a snapshot with no numeric values from one that
+    /// records at least a single field.
+    func testBodyMeasurementIsEmptyReflectsRecordedValues() {
+        XCTAssertTrue(BodyMeasurement().isEmpty,
+                      "A measurement with no values should be empty")
+        XCTAssertTrue(BodyMeasurement(notes: "just a note").isEmpty,
+                      "Notes alone should not make a measurement non-empty")
+        XCTAssertFalse(BodyMeasurement(weight: 180).isEmpty,
+                       "A single recorded value should make a measurement non-empty")
+    }
+
+    /// `recordedFields` returns only the fields that carry a value, in the same
+    /// order they appear in `allFields`.
+    func testBodyMeasurementRecordedFieldsFiltersNils() {
+        let measurement = BodyMeasurement(weight: 180, bodyFatPercentage: 15, waist: 32)
+
+        let labels = measurement.recordedFields.map(\.label)
+        XCTAssertEqual(labels, ["Weight", "Body Fat %", "Waist"])
+        XCTAssertEqual(measurement.recordedFields.count, 3)
+    }
+
+    /// The `@Query` sort used by the Measurements screen orders newest-first.
+    func testBodyMeasurementsFetchSortedByDateDescending() throws {
+        let older = BodyMeasurement(date: .now.addingTimeInterval(-86_400), weight: 183)
+        let newer = BodyMeasurement(date: .now, weight: 181)
+        context.insert(older)
+        context.insert(newer)
+        try context.save()
+
+        var descriptor = FetchDescriptor<BodyMeasurement>()
+        descriptor.sortBy = [SortDescriptor(\.date, order: .reverse)]
+        let fetched = try context.fetch(descriptor)
+
+        XCTAssertEqual(fetched.map(\.weight), [181, 183])
+    }
 }
