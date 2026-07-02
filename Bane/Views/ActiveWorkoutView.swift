@@ -1,6 +1,20 @@
 import SwiftData
 import SwiftUI
 
+/// Rate of Perceived Exertion choices offered per set, on the standard 6–10
+/// half-point scale used by strength trainers.
+enum RPEScale {
+    /// Selectable values, ascending.
+    static let values: [Double] = [6, 6.5, 7, 7.5, 8, 8.5, 9, 9.5, 10]
+
+    /// A compact label dropping the trailing `.0` on whole numbers (`8`, `8.5`).
+    static func label(_ value: Double) -> String {
+        value.rounded() == value
+            ? String(Int(value))
+            : String(format: "%.1f", value)
+    }
+}
+
 /// The active workout-logging surface: the core loop of the app.
 ///
 /// Drives a single in-progress `Workout` — add exercises from the library, log
@@ -330,6 +344,8 @@ private struct SetRow: View {
                     .keyboardType(.decimalPad)
             }
 
+            rpeColumn
+
             Button {
                 set.completed.toggle()
                 if set.completed { onComplete() }
@@ -355,6 +371,33 @@ private struct SetRow: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
+
+    /// Optional RPE picker, matching the titled column layout of reps/weight.
+    /// Bounded to the 6–10 half-point scale, with a dash for "not recorded".
+    private var rpeColumn: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text("RPE")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            Menu {
+                Picker("RPE", selection: $set.rpe) {
+                    Text("—").tag(Double?.none)
+                    ForEach(RPEScale.values, id: \.self) { value in
+                        Text(RPEScale.label(value)).tag(Double?.some(value))
+                    }
+                }
+            } label: {
+                Text(set.rpe.map(RPEScale.label) ?? "—")
+                    .font(.body)
+                    .frame(maxWidth: .infinity, minHeight: 30)
+                    .background(Color.secondary.opacity(0.12), in: .rect(cornerRadius: 6))
+            }
+            .buttonStyle(.plain)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityLabel("RPE")
+        .accessibilityValue(set.rpe.map(RPEScale.label) ?? "Not set")
+    }
 }
 
 #Preview {
@@ -369,7 +412,7 @@ private struct SetRow: View {
         we.workout = workout
         we.sets = [
             SetEntry(order: 0, reps: 10, weight: 45, isWarmup: true),
-            SetEntry(order: 1, reps: 8, weight: 135, completed: true),
+            SetEntry(order: 1, reps: 8, weight: 135, completed: true, rpe: 8),
             SetEntry(order: 2, reps: 8, weight: 135),
         ]
         for set in we.sets { set.workoutExercise = we }

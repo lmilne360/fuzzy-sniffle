@@ -92,6 +92,9 @@ final class SetEntry {
     var completed: Bool
     /// Warm-up sets are excluded from working-set totals and PRs.
     var isWarmup: Bool
+    /// Rate of Perceived Exertion for the set (typically 6–10 in 0.5 steps).
+    /// Optional — defaults to `nil` so it stays migration-safe for existing sets.
+    var rpe: Double?
     /// Inverse of ``WorkoutExercise/sets``.
     var workoutExercise: WorkoutExercise?
 
@@ -101,7 +104,8 @@ final class SetEntry {
         reps: Int = 0,
         weight: Double = 0,
         completed: Bool = false,
-        isWarmup: Bool = false
+        isWarmup: Bool = false,
+        rpe: Double? = nil
     ) {
         self.id = id
         self.order = order
@@ -109,5 +113,6 @@ final class SetEntry {
         self.weight = weight
         self.completed = completed
         self.isWarmup = isWarmup
+        self.rpe = rpe
     }
 }
