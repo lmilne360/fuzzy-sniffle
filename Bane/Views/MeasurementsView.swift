@@ -12,6 +12,9 @@ struct MeasurementsView: View {
     @Query(sort: \BodyMeasurement.date, order: .reverse) private var measurements: [BodyMeasurement]
 
     @State private var isAddingMeasurement = false
+    @State private var isImportingFromHealth = false
+    @State private var isShowingHealthAlert = false
+    @State private var healthAlertMessage = ""
 
     var body: some View {
         List {
@@ -26,6 +29,18 @@ struct MeasurementsView: View {
         }
         .navigationTitle("Measurements")
         .toolbar {
+            #if canImport(HealthKit)
+            if HealthKitService.shared.isAvailable {
+                ToolbarItem(placement: .secondaryAction) {
+                    Button {
+                        Task { await importBodyweightFromHealth() }
+                    } label: {
+                        Label("Import from Health", systemImage: "heart.text.square")
+                    }
+                    .disabled(isImportingFromHealth)
+                }
+            }
+            #endif
             ToolbarItem(placement: .primaryAction) {
                 Button {
                     isAddingMeasurement = true
@@ -33,6 +48,11 @@ struct MeasurementsView: View {
                     Label("Add Measurement", systemImage: "plus")
                 }
             }
+        }
+        .alert("Apple Health", isPresented: $isShowingHealthAlert) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(healthAlertMessage)
         }
         .overlay {
             if measurements.isEmpty {
@@ -51,6 +71,34 @@ struct MeasurementsView: View {
             modelContext.delete(measurements[index])
         }
     }
+
+    #if canImport(HealthKit)
+    /// Pulls the latest bodyweight from Apple Health into a new measurement,
+    /// skipping the day if one is already recorded. Surfaces the outcome via an
+    /// alert so the user gets feedback whether or not anything was imported.
+    @MainActor
+    private func importBodyweightFromHealth() async {
+        isImportingFromHealth = true
+        defer { isImportingFromHealth = false }
+
+        guard let sample = await HealthKitService.shared.latestBodyMass() else {
+            healthAlertMessage = "No bodyweight found in Apple Health, or access wasn't granted."
+            isShowingHealthAlert = true
+            return
+        }
+        guard HealthKitSync.shouldImport(bodyMassDate: sample.date, existing: measurements) else {
+            healthAlertMessage = "Your latest Apple Health bodyweight is already recorded."
+            isShowingHealthAlert = true
+            return
+        }
+
+        modelContext.insert(
+            BodyMeasurement(date: sample.date, weight: sample.weight, notes: "Imported from Apple Health")
+        )
+        healthAlertMessage = "Imported bodyweight of \(MeasurementFormat.value(sample.weight)) from Apple Health."
+        isShowingHealthAlert = true
+    }
+    #endif
 
     private var emptyState: some View {
         ContentUnavailableView {

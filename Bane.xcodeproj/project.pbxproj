@@ -313,7 +313,10 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Bane/Bane.entitlements;
 				CODE_SIGN_STYLE = Automatic;
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "Bane reads your latest bodyweight from Apple Health to log it as a measurement.";
+				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "Bane saves your finished workouts to Apple Health.";
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -340,7 +343,10 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Bane/Bane.entitlements;
 				CODE_SIGN_STYLE = Automatic;
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "Bane reads your latest bodyweight from Apple Health to log it as a measurement.";
+				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "Bane saves your finished workouts to Apple Health.";
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;

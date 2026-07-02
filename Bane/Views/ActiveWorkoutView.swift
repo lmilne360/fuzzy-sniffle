@@ -300,9 +300,14 @@ struct ActiveWorkoutView: View {
         }
     }
 
-    /// Completes the session: stamp the finish time so it moves to history.
+    /// Completes the session: stamp the finish time so it moves to history, then
+    /// mirror it to Apple Health as a strength-training workout (best-effort).
     private func finish() {
         workout.finishedAt = .now
+        #if canImport(HealthKit)
+        let finished = workout
+        Task { await HealthKitService.shared.save(finished) }
+        #endif
         dismiss()
     }
 
