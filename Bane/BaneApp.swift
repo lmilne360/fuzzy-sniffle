@@ -1,3 +1,4 @@
+import SwiftData
 import SwiftUI
 
 /// Application entry point using the SwiftUI app lifecycle.
@@ -7,5 +8,6 @@ struct BaneApp: App {
         WindowGroup {
             RootView()
         }
+        .modelContainer(Persistence.shared)
     }
 }
