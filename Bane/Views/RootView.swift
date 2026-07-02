@@ -6,6 +6,10 @@ import SwiftUI
 struct RootView: View {
     @Environment(\.modelContext) private var modelContext
 
+    /// Presents workouts started via Siri/Shortcuts App Intents, which run
+    /// outside the view hierarchy and hand off through this coordinator.
+    @Bindable private var sessionCoordinator = WorkoutSessionCoordinator.shared
+
     var body: some View {
         TabView {
             NavigationStack {
@@ -32,6 +36,9 @@ struct RootView: View {
         .task {
             // Seed the built-in exercise library once, on first launch.
             ExerciseLibrary.seedIfNeeded(in: modelContext)
+        }
+        .fullScreenCover(item: $sessionCoordinator.pendingWorkout) { workout in
+            ActiveWorkoutView(workout: workout)
         }
     }
 }
