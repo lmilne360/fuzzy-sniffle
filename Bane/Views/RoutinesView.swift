@@ -3,15 +3,17 @@ import SwiftUI
 
 /// The Routines tab: lists saved workout templates and hosts create/edit/delete.
 ///
-/// Tapping a routine opens the editor for that routine; the `+` toolbar button
-/// opens the editor for a new one. Both are presented modally so the editor's
-/// `Cancel`/`Save` semantics are consistent. Swipe-to-delete removes a routine
-/// (its items cascade away with it).
+/// Tapping a routine's summary opens the editor for that routine; the `+`
+/// toolbar button opens the editor for a new one. Both are presented modally so
+/// the editor's `Cancel`/`Save` semantics are consistent. Swipe-to-delete
+/// removes a routine (its items cascade away with it).
 ///
-/// A leading swipe action (and a matching context-menu item) **starts a
-/// workout** from the routine: it builds a pre-populated in-progress `Workout`
-/// and presents ``ActiveWorkoutView`` for logging — the tie-in between saved
-/// templates and the core logging loop (ba-32q.8).
+/// Each row carries a prominent **Start** button (backed by a matching leading
+/// swipe action and context-menu item) that **starts a workout** from the
+/// routine: it builds a pre-populated in-progress `Workout` and presents
+/// ``ActiveWorkoutView`` for logging — the tie-in between saved templates and
+/// the core logging loop (ba-32q.8). The visible button keeps that entry point
+/// discoverable rather than hidden behind a swipe/long-press (ba-07l.13).
 struct RoutinesView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \Routine.createdAt, order: .reverse) private var routines: [Routine]
@@ -24,12 +26,29 @@ struct RoutinesView: View {
     var body: some View {
         List {
             ForEach(routines) { routine in
-                Button {
-                    activeSheet = .edit(routine)
-                } label: {
-                    RoutineRow(routine: routine)
+                HStack {
+                    Button {
+                        activeSheet = .edit(routine)
+                    } label: {
+                        RoutineRow(routine: routine)
+                    }
+                    .buttonStyle(.plain)
+
+                    Spacer(minLength: 12)
+
+                    Button {
+                        start(routine)
+                    } label: {
+                        Label("Start", systemImage: "play.fill")
+                    }
+                    // An explicit button style keeps this an independent tap
+                    // target: without one the enclosing List row would treat
+                    // the whole cell as a single button.
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .tint(.green)
+                    .accessibilityHint("Starts a workout from this routine")
                 }
-                .buttonStyle(.plain)
                 .swipeActions(edge: .leading) {
                     Button {
                         start(routine)
