@@ -36,6 +36,26 @@ final class Workout {
         exercises.sorted { $0.order < $1.order }
     }
 
+    /// Ordered exercises collapsed into superset blocks for display.
+    ///
+    /// Consecutive exercises that share the same non-`nil` ``WorkoutExercise/supersetGroup``
+    /// are returned together as one block; every other exercise comes back as a
+    /// single-element block. Order follows ``orderedExercises``. A block with two
+    /// or more members represents a superset the user alternates between.
+    var exerciseGroups: [[WorkoutExercise]] {
+        var groups: [[WorkoutExercise]] = []
+        for exercise in orderedExercises {
+            if let group = exercise.supersetGroup,
+               let last = groups.last?.first,
+               last.supersetGroup == group {
+                groups[groups.count - 1].append(exercise)
+            } else {
+                groups.append([exercise])
+            }
+        }
+        return groups
+    }
+
     /// `true` once the session has been completed.
     var isFinished: Bool { finishedAt != nil }
 }
@@ -48,6 +68,11 @@ final class WorkoutExercise {
     var order: Int
     /// Free-form notes the user records for this exercise during the workout.
     var notes: String
+    /// Identifies the superset this exercise belongs to. Exercises sharing the
+    /// same non-`nil` id are performed as a superset — the user alternates
+    /// between them. `nil` means the exercise stands on its own. Optional so it
+    /// stays migration-safe for workouts logged before supersets existed.
+    var supersetGroup: UUID?
     /// Referenced exercise. Optional so a deleted exercise nullifies rather
     /// than cascading through workout history.
     var exercise: Exercise?
@@ -63,12 +88,14 @@ final class WorkoutExercise {
         order: Int,
         notes: String = "",
         exercise: Exercise? = nil,
+        supersetGroup: UUID? = nil,
         sets: [SetEntry] = []
     ) {
         self.id = id
         self.order = order
         self.notes = notes
         self.exercise = exercise
+        self.supersetGroup = supersetGroup
         self.sets = sets
     }
 
@@ -76,6 +103,9 @@ final class WorkoutExercise {
     var orderedSets: [SetEntry] {
         sets.sorted { $0.order < $1.order }
     }
+
+    /// `true` when this exercise is part of a superset.
+    var isInSuperset: Bool { supersetGroup != nil }
 }
 
 /// A single set within a `WorkoutExercise`: the reps and weight actually
