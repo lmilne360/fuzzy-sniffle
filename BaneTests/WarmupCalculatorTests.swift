@@ -132,4 +132,40 @@ final class WarmupCalculatorTests: XCTestCase {
             WarmupPreferences.fallbackSchemeID
         )
     }
+
+    /// Each unit offers rounding increments native to that unit, and its default
+    /// increment is one of them (ba-2qm).
+    func testRoundingPresetsAndFallbackAreUnitNative() {
+        XCTAssertEqual(WarmupPreferences.roundingPresets(for: .pounds), [10, 5, 2.5, 1])
+        XCTAssertEqual(WarmupPreferences.roundingPresets(for: .kilograms), [5, 2.5, 1.25, 1])
+
+        XCTAssertTrue(
+            WarmupPreferences.roundingPresets(for: .pounds)
+                .contains(WarmupPreferences.fallbackRounding(for: .pounds))
+        )
+        XCTAssertTrue(
+            WarmupPreferences.roundingPresets(for: .kilograms)
+                .contains(WarmupPreferences.fallbackRounding(for: .kilograms))
+        )
+    }
+
+    /// Building the ladder in kilograms rounds to kg-native increments; converting
+    /// each rung back to canonical pounds is what the calculator hands off, so a
+    /// clean 2.5 kg step round-trips to its pound equivalent (ba-2qm).
+    func testKilogramLadderRoundsInKgThenReturnsPounds() {
+        // 100 kg working weight, standard ramp, rounded to 2.5 kg.
+        // 0.40 → 40 kg, 0.60 → 60 kg, 0.80 → 80 kg.
+        let kgSets = WarmupCalculator.warmupSets(
+            workingWeight: 100,
+            scheme: standard,
+            rounding: 2.5
+        )
+        XCTAssertEqual(kgSets.map(\.weight), [40, 60, 80])
+
+        // The view converts each rung back to pounds before handing it off.
+        let pounds = kgSets.map { WeightUnit.kilograms.toPounds($0.weight) }
+        XCTAssertEqual(pounds[0], 40 * WeightUnit.poundsPerKilogram, accuracy: 0.0000001)
+        XCTAssertEqual(pounds[1], 60 * WeightUnit.poundsPerKilogram, accuracy: 0.0000001)
+        XCTAssertEqual(pounds[2], 80 * WeightUnit.poundsPerKilogram, accuracy: 0.0000001)
+    }
 }

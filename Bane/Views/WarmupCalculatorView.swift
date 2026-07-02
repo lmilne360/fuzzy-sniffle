@@ -21,9 +21,14 @@ struct WarmupCalculatorView: View {
     @AppStorage(WarmupPreferences.schemeKey)
     private var schemeID = WarmupPreferences.fallbackSchemeID
     @AppStorage(WarmupPreferences.roundingKey)
-    private var rounding = WarmupPreferences.fallbackRounding
+    private var rounding = WarmupPreferences.fallbackRounding(for: WeightPreferences.fallback)
     @AppStorage(PlatePreferences.barWeightKey)
     private var barWeight = PlatePreferences.fallbackBarWeight
+
+    /// The unit weights are displayed and entered in. The working weight and bar
+    /// stay canonical pounds; only the on-screen numbers, the rounding increment,
+    /// and the ladder handed back convert (ba-2qm).
+    @AppStorage(WeightPreferences.unitKey) private var weightUnit = WeightPreferences.fallback
 
     init(
         initialWorkingWeight: Double,
@@ -38,13 +43,34 @@ struct WarmupCalculatorView: View {
         WarmupPreferences.scheme(id: schemeID)
     }
 
+    /// The stored rounding clamped to a preset valid for the current unit, so an
+    /// increment chosen in one unit never drives the ladder — or leaves the
+    /// picker without a selection — after switching units (ba-2qm).
+    private var effectiveRounding: Double {
+        let presets = WarmupPreferences.roundingPresets(for: weightUnit)
+        return presets.contains(rounding)
+            ? rounding
+            : WarmupPreferences.fallbackRounding(for: weightUnit)
+    }
+
+    /// The warm-up ladder in canonical pounds, ready to hand back via `onAdd`.
+    ///
+    /// The ramp is built and rounded in the *displayed* unit — so kg users get
+    /// kg-native rungs — then each weight converts back to the pound scale the
+    /// data model stores (ba-2qm).
     private var warmupSets: [WarmupCalculator.WarmupSet] {
         WarmupCalculator.warmupSets(
-            workingWeight: workingWeight,
+            workingWeight: weightUnit.fromPounds(workingWeight),
             scheme: scheme.steps,
-            rounding: rounding,
-            barWeight: barWeight
-        )
+            rounding: effectiveRounding,
+            barWeight: weightUnit.fromPounds(barWeight)
+        ).map { set in
+            WarmupCalculator.WarmupSet(
+                percentage: set.percentage,
+                weight: weightUnit.toPounds(set.weight),
+                reps: set.reps
+            )
+        }
     }
 
     var body: some View {
@@ -76,16 +102,16 @@ struct WarmupCalculatorView: View {
     // MARK: - Sections
 
     private var workingWeightSection: some View {
-        Section("Working weight") {
+        Section("Working weight (\(weightUnit.abbreviation))") {
             HStack {
-                TextField("0", value: $workingWeight, format: .number)
+                TextField("0", value: $workingWeight.weightDisplay(in: weightUnit), format: .number)
                     .keyboardType(.decimalPad)
                     .font(.title2.monospacedDigit())
                 Stepper(
                     "Working weight",
                     value: $workingWeight,
                     in: 0...10_000,
-                    step: rounding
+                    step: weightUnit.toPounds(effectiveRounding)
                 )
                 .labelsHidden()
             }
@@ -122,7 +148,7 @@ struct WarmupCalculatorView: View {
                             .foregroundStyle(.secondary)
                             .font(.caption)
                         Spacer()
-                        Text("\(set.reps) × \(Formatting.plate(set.weight))")
+                        Text("\(set.reps) × \(WeightFormat.weight(set.weight, in: weightUnit))")
                             .fontWeight(.medium)
                             .monospacedDigit()
                     }
@@ -132,14 +158,21 @@ struct WarmupCalculatorView: View {
     }
 
     private var roundingSection: some View {
-        Section("Round to") {
-            Picker("Round to", selection: $rounding) {
-                ForEach(WarmupPreferences.roundingPresets, id: \.self) { increment in
+        Section("Round to (\(weightUnit.abbreviation))") {
+            Picker("Round to", selection: roundingSelection) {
+                ForEach(WarmupPreferences.roundingPresets(for: weightUnit), id: \.self) { increment in
                     Text(Formatting.plate(increment)).tag(increment)
                 }
             }
             .pickerStyle(.segmented)
         }
+    }
+
+    /// Drives the rounding picker off ``effectiveRounding`` so the segmented
+    /// control always shows a valid selection, even right after a unit switch
+    /// leaves the stored increment outside the new unit's presets (ba-2qm).
+    private var roundingSelection: Binding<Double> {
+        Binding(get: { effectiveRounding }, set: { rounding = $0 })
     }
 
     /// A whole-number percent label for a `0...1` fraction (`40%`).

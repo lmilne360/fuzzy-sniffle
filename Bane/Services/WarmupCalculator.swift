@@ -69,10 +69,27 @@ enum WarmupPreferences {
     static let schemeKey = "warmupSchemeID"
     static let roundingKey = "warmupRounding"
 
-    /// Rounding increment used until the user picks another.
-    static let fallbackRounding: Double = 5
-    /// Common rounding increments offered in the picker.
-    static let roundingPresets: [Double] = [10, 5, 2.5, 1]
+    /// Common rounding increments offered in the picker, per display unit.
+    ///
+    /// Warm-up weights round to loadable increments in the *displayed* unit, so a
+    /// kg user gets kg-native steps (2.5 kg, 1.25 kg) rather than pound steps
+    /// merely relabeled (ba-2qm). The stored increment is therefore in whatever
+    /// unit was selected when it was chosen; ``WarmupCalculatorView`` clamps it
+    /// back to a valid preset after a unit switch.
+    static func roundingPresets(for unit: WeightUnit) -> [Double] {
+        switch unit {
+        case .pounds: return [10, 5, 2.5, 1]
+        case .kilograms: return [5, 2.5, 1.25, 1]
+        }
+    }
+
+    /// Rounding increment used until the user picks another, per display unit.
+    static func fallbackRounding(for unit: WeightUnit) -> Double {
+        switch unit {
+        case .pounds: return 5
+        case .kilograms: return 2.5
+        }
+    }
 
     /// The default ramp, used until the user picks another.
     static let fallbackSchemeID = "standard"
