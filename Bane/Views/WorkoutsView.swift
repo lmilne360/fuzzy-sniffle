@@ -17,6 +17,9 @@ struct WorkoutsView: View {
     /// Whether the rest-timer preferences sheet is showing.
     @State private var isShowingRestSettings = false
 
+    /// Whether the CSV data-export sheet is showing.
+    @State private var isShowingExport = false
+
     var body: some View {
         List {
             if !inProgress.isEmpty {
@@ -62,12 +65,22 @@ struct WorkoutsView: View {
                     Label("Rest Timer", systemImage: "timer")
                 }
             }
+            ToolbarItem(placement: .topBarLeading) {
+                Button {
+                    isShowingExport = true
+                } label: {
+                    Label("Export Data", systemImage: "square.and.arrow.up")
+                }
+            }
         }
         .fullScreenCover(item: $activeWorkout) { workout in
             ActiveWorkoutView(workout: workout)
         }
         .sheet(isPresented: $isShowingRestSettings) {
             RestSettingsView()
+        }
+        .sheet(isPresented: $isShowingExport) {
+            DataExportView()
         }
     }
 
