@@ -66,6 +66,27 @@ enum BodyweightDefault {
     }
 }
 
+/// Reordering exercises within an active workout via drag-to-reorder.
+///
+/// Extracted from the view so the contract — `order` renumbers to match the
+/// dragged sequence while each exercise's own data (sets, notes, superset
+/// membership) travels untouched — is unit-testable against SwiftData models
+/// (ba-4j8). Superset membership travels with each exercise as-is; dissolving
+/// a group the move splits apart is the caller's responsibility (see
+/// `ActiveWorkoutView.normalizeSupersets`).
+enum ExerciseReorder {
+    /// Moves exercises within `workout` per the standard SwiftUI `onMove`
+    /// semantics (source offsets relative to the current order, landing before
+    /// `destination`), renumbering `order` to match the new sequence.
+    static func move(in workout: Workout, from source: IndexSet, to destination: Int) {
+        var ordered = workout.orderedExercises
+        ordered.move(fromOffsets: source, toOffset: destination)
+        for (index, exercise) in ordered.enumerated() where exercise.order != index {
+            exercise.order = index
+        }
+    }
+}
+
 /// Swapping an active-workout exercise for an alternative.
 ///
 /// Extracted from the view so the contract — the referenced exercise changes
@@ -199,6 +220,7 @@ struct ActiveWorkoutView: View {
                                 : nil
                         )
                     }
+                    .onMove(perform: moveExercises)
                 }
 
                 Section {
@@ -224,6 +246,11 @@ struct ActiveWorkoutView: View {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Discard", role: .destructive) {
                         isConfirmingDiscard = true
+                    }
+                }
+                ToolbarItem(placement: .topBarLeading) {
+                    if workout.exercises.count > 1 {
+                        EditButton()
                     }
                 }
                 ToolbarItem(placement: .principal) {
@@ -391,6 +418,13 @@ struct ActiveWorkoutView: View {
         for (index, set) in workoutExercise.orderedSets.enumerated() where set.order != index {
             set.order = index
         }
+    }
+
+    /// Reorders exercises per a drag-to-reorder gesture, then dissolves any
+    /// superset the move split apart (mirrors ``remove(_:)``'s invariant upkeep).
+    private func moveExercises(from source: IndexSet, to destination: Int) {
+        ExerciseReorder.move(in: workout, from: source, to: destination)
+        normalizeSupersets()
     }
 
     private func remove(_ workoutExercise: WorkoutExercise) {
