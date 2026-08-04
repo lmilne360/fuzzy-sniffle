@@ -180,6 +180,17 @@ struct ActiveWorkoutView: View {
     /// alternatives picker sheet. `nil` when no swap is in progress.
     @State private var swappingExercise: WorkoutExercise?
 
+    /// The exercise the user is building a warm-up ladder for, driving the
+    /// warm-up calculator sheet. `nil` when no calculator is showing.
+    ///
+    /// Hoisted here (rather than owned per-row by `ExerciseSection`) because a
+    /// `.sheet` bound to `@State` inside a `List` `Section` can present and
+    /// immediately dismiss — the section's header/content/footer are
+    /// decomposed by the list renderer, so the presenting identity is
+    /// unstable. Driving it from a stable ancestor, the same way
+    /// `swappingExercise` already does for the swap sheet, avoids that (ba-yy0).
+    @State private var warmupTarget: WorkoutExercise?
+
     /// Drives the between-sets rest countdown surfaced at the bottom of the view.
     @State private var restTimer = RestTimerController()
 
@@ -209,9 +220,7 @@ struct ActiveWorkoutView: View {
                             onRemoveExercise: { remove(workoutExercise) },
                             onSwap: { swappingExercise = workoutExercise },
                             onComplete: { set in startRest(for: workoutExercise, set: set) },
-                            onAddWarmups: { warmups in
-                                addWarmupSets(warmups, to: workoutExercise)
-                            },
+                            onOpenWarmups: { warmupTarget = workoutExercise },
                             onSupersetWithNext: hasNextExercise(after: workoutExercise)
                                 ? { supersetWithNext(workoutExercise) }
                                 : nil,
@@ -275,6 +284,12 @@ struct ActiveWorkoutView: View {
                         onSelect: { swap(workoutExercise, to: $0) }
                     )
                 }
+            }
+            .sheet(item: $warmupTarget) { workoutExercise in
+                WarmupCalculatorView(
+                    initialWorkingWeight: warmupSeedWeight(for: workoutExercise),
+                    onAdd: { warmups in addWarmupSets(warmups, to: workoutExercise) }
+                )
             }
             .confirmationDialog(
                 "Discard this workout?",
@@ -407,6 +422,15 @@ struct ActiveWorkoutView: View {
     /// flagged `isWarmup`, tailing any existing warm-ups.
     private func addWarmupSet(to workoutExercise: WorkoutExercise) {
         ManualWarmup.insert(into: workoutExercise, bodyWeight: currentBodyWeight)
+    }
+
+    /// Weight the warm-up calculator opens on: the heaviest working set, falling
+    /// back to the last logged set, then zero for a fresh exercise.
+    private func warmupSeedWeight(for workoutExercise: WorkoutExercise) -> Double {
+        let working = workoutExercise.orderedSets.filter { !$0.isWarmup }
+        return working.map(\.weight).max()
+            ?? workoutExercise.orderedSets.last?.weight
+            ?? 0
     }
 
     private func deleteSets(at offsets: IndexSet, from workoutExercise: WorkoutExercise) {
@@ -601,16 +625,13 @@ private struct ExerciseSection: View {
     let onSwap: () -> Void
     /// Fired with the set that was just checked complete.
     let onComplete: (SetEntry) -> Void
-    /// Prepends a freshly calculated warm-up ladder to this exercise.
-    let onAddWarmups: ([WarmupCalculator.WarmupSet]) -> Void
+    /// Opens the warm-up calculator sheet for this exercise.
+    let onOpenWarmups: () -> Void
     /// Links this exercise with the one below into a superset. `nil` when there
     /// is no exercise below to link to.
     let onSupersetWithNext: (() -> Void)?
     /// Detaches this exercise from its superset. `nil` when it isn't in one.
     let onLeaveSuperset: (() -> Void)?
-
-    /// Drives the warm-up calculator sheet.
-    @State private var isAddingWarmups = false
 
     var body: some View {
         Section {
@@ -665,16 +686,11 @@ private struct ExerciseSection: View {
                 .textCase(nil)
             }
         }
-        .sheet(isPresented: $isAddingWarmups) {
-            WarmupCalculatorView(initialWorkingWeight: warmupSeedWeight, onAdd: onAddWarmups)
-        }
     }
 
     /// A flame button that opens the warm-up calculator for this exercise.
     private var warmupButton: some View {
-        Button {
-            isAddingWarmups = true
-        } label: {
+        Button(action: onOpenWarmups) {
             Image(systemName: "flame")
                 .font(.caption)
         }
@@ -699,15 +715,6 @@ private struct ExerciseSection: View {
     /// time" ghost values. Recomputed per render — cheap for realistic set counts.
     private var previousValues: [UUID: PreviousSession.SetValue] {
         PreviousSession.lastValues(for: workoutExercise)
-    }
-
-    /// Weight the warm-up calculator opens on: the heaviest working set, falling
-    /// back to the last logged set, then zero for a fresh exercise.
-    private var warmupSeedWeight: Double {
-        let working = workoutExercise.orderedSets.filter { !$0.isWarmup }
-        return working.map(\.weight).max()
-            ?? workoutExercise.orderedSets.last?.weight
-            ?? 0
     }
 
     /// The superset identity chip: its letter and this exercise's position
