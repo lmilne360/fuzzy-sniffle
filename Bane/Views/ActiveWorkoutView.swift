@@ -140,7 +140,9 @@ enum PreviousSession {
 /// each set as reps × weight, tap sets complete, add/remove sets, flag warm-ups,
 /// and record per-exercise notes while a running timer ticks in the toolbar.
 /// **Finish** stamps `finishedAt` and persists the session to history;
-/// **Discard** deletes the workout entirely.
+/// **Discard** deletes the workout entirely; the chevron **minimizes** back to
+/// the tab bar, leaving the workout running so other pages stay reachable
+/// mid-session — it resumes from the Workouts tab's "In Progress" section.
 struct ActiveWorkoutView: View {
     @Bindable var workout: Workout
 
@@ -210,6 +212,15 @@ struct ActiveWorkoutView: View {
             .navigationTitle("Workout")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "chevron.down")
+                    }
+                    .accessibilityLabel("Minimize workout")
+                    .accessibilityHint("Returns to the app while keeping this workout in progress")
+                }
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Discard", role: .destructive) {
                         isConfirmingDiscard = true
