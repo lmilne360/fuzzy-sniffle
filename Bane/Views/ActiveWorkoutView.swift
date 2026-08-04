@@ -24,12 +24,21 @@ enum ManualWarmup {
     /// Appends a blank warm-up set to `workoutExercise`, ordered at the tail of
     /// the warm-up block (ahead of the working sets), and renumbers the working
     /// sets to follow. Returns the newly inserted set.
+    ///
+    /// `bodyWeight` seeds the set's weight when the exercise is bodyweight (see
+    /// ``BodyweightDefault``); pass `nil` when none has been recorded.
     @discardableResult
-    static func insert(into workoutExercise: WorkoutExercise) -> SetEntry {
+    static func insert(into workoutExercise: WorkoutExercise, bodyWeight: Double? = nil) -> SetEntry {
         let warmups = workoutExercise.orderedSets.filter(\.isWarmup)
         let workingSets = workoutExercise.orderedSets.filter { !$0.isWarmup }
 
-        let newWarmup = SetEntry(order: warmups.count, isWarmup: true)
+        let newWarmup = SetEntry(
+            order: warmups.count,
+            weight: BodyweightDefault.weight(
+                for: workoutExercise.exercise, bodyWeight: bodyWeight, fallback: 0
+            ),
+            isWarmup: true
+        )
         newWarmup.workoutExercise = workoutExercise
         workoutExercise.sets.append(newWarmup)
 
@@ -38,6 +47,22 @@ enum ManualWarmup {
             set.order = warmups.count + 1 + offset
         }
         return newWarmup
+    }
+}
+
+/// Seeding a new set's starting weight for bodyweight exercises.
+///
+/// Extracted from the view so the rule — a bodyweight exercise's unset weight
+/// defaults to the user's most recently recorded body weight rather than
+/// zero — is unit-testable without SwiftData.
+enum BodyweightDefault {
+    /// The weight a freshly created set should start at. Returns `bodyWeight`
+    /// when `exercise` trains bodyweight and a body weight has been recorded;
+    /// otherwise returns `fallback` unchanged (typically `0`, or a copied-
+    /// forward previous weight).
+    static func weight(for exercise: Exercise?, bodyWeight: Double?, fallback: Double) -> Double {
+        guard exercise?.isBodyweight == true, let bodyWeight else { return fallback }
+        return bodyWeight
     }
 }
 
@@ -121,6 +146,10 @@ struct ActiveWorkoutView: View {
 
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+
+    /// Newest first, so ``currentBodyWeight`` is the most recently recorded
+    /// value.
+    @Query(sort: \BodyMeasurement.date, order: .reverse) private var bodyMeasurements: [BodyMeasurement]
 
     @State private var isPickingExercise = false
     @State private var isConfirmingDiscard = false
@@ -258,6 +287,12 @@ struct ActiveWorkoutView: View {
 
     // MARK: - Mutations
 
+    /// The user's most recently recorded body weight, or `nil` if none has been
+    /// entered. Feeds ``BodyweightDefault`` when seeding new sets.
+    private var currentBodyWeight: Double? {
+        bodyMeasurements.first(where: { $0.weight != nil })?.weight
+    }
+
     /// Appends the chosen exercise to the workout, seeding it with one empty set
     /// so the user can start logging immediately.
     private func add(_ exercise: Exercise) {
@@ -268,7 +303,10 @@ struct ActiveWorkoutView: View {
         workoutExercise.workout = workout
         workout.exercises.append(workoutExercise)
 
-        let firstSet = SetEntry(order: 0)
+        let firstSet = SetEntry(
+            order: 0,
+            weight: BodyweightDefault.weight(for: exercise, bodyWeight: currentBodyWeight, fallback: 0)
+        )
         firstSet.workoutExercise = workoutExercise
         workoutExercise.sets.append(firstSet)
     }
@@ -283,10 +321,13 @@ struct ActiveWorkoutView: View {
     /// a sensible starting point.
     private func addSet(to workoutExercise: WorkoutExercise) {
         let previous = workoutExercise.orderedSets.last
+        let fallbackWeight = BodyweightDefault.weight(
+            for: workoutExercise.exercise, bodyWeight: currentBodyWeight, fallback: 0
+        )
         let newSet = SetEntry(
             order: workoutExercise.sets.count,
             reps: previous?.reps ?? 0,
-            weight: previous?.weight ?? 0
+            weight: previous?.weight ?? fallbackWeight
         )
         newSet.workoutExercise = workoutExercise
         workoutExercise.sets.append(newSet)
@@ -327,7 +368,7 @@ struct ActiveWorkoutView: View {
     /// so warm-ups lead. The new row is an ordinary editable set (reps/weight)
     /// flagged `isWarmup`, tailing any existing warm-ups.
     private func addWarmupSet(to workoutExercise: WorkoutExercise) {
-        ManualWarmup.insert(into: workoutExercise)
+        ManualWarmup.insert(into: workoutExercise, bodyWeight: currentBodyWeight)
     }
 
     private func deleteSets(at offsets: IndexSet, from workoutExercise: WorkoutExercise) {

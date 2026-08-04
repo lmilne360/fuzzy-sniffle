@@ -64,4 +64,9 @@ final class Exercise {
         self.isCustom = isCustom
         self.restDuration = restDuration
     }
+
+    /// `true` for exercises trained with no external load (push-ups, planks,
+    /// bodyweight squats, …) — used to default an unset set weight to the
+    /// user's recorded body weight instead of zero.
+    var isBodyweight: Bool { equipment == .bodyweight }
 }
