@@ -59,7 +59,7 @@ struct WorkoutsView: View {
         .listRowSeparatorTint(palette.line)
         .scrollContentBackground(.hidden)
         .background(palette.bg)
-        .navigationTitle("Workouts")
+        .navigationTitle("Train")
         .overlay {
             if workouts.isEmpty {
                 emptyState

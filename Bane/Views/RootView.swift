@@ -17,28 +17,44 @@ struct RootView: View {
                 WorkoutsView()
             }
             .tabItem {
-                Label("Workouts", systemImage: "dumbbell")
+                Label {
+                    Text("Train")
+                } icon: {
+                    BaneTabGlyph(kind: .bars)
+                }
             }
 
             NavigationStack {
                 ExercisesView()
             }
             .tabItem {
-                Label("Exercises", systemImage: "figure.strengthtraining.traditional")
+                Label {
+                    Text("Lifts")
+                } icon: {
+                    BaneTabGlyph(kind: .grid)
+                }
             }
 
             NavigationStack {
                 RoutinesView()
             }
             .tabItem {
-                Label("Routines", systemImage: "list.bullet.rectangle")
+                Label {
+                    Text("Plans")
+                } icon: {
+                    BaneTabGlyph(kind: .list)
+                }
             }
 
             NavigationStack {
                 RecordsView()
             }
             .tabItem {
-                Label("Records", systemImage: "trophy")
+                Label {
+                    Text("Records")
+                } icon: {
+                    BaneTabGlyph(kind: .diamond)
+                }
             }
 
             NavigationStack {

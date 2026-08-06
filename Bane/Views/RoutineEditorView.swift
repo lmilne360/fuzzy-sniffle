@@ -54,7 +54,7 @@ struct RoutineEditorView: View {
     var body: some View {
         Form {
             Section("Name") {
-                TextField("Routine name", text: $name)
+                TextField("Plan name", text: $name)
                     .textInputAutocapitalization(.words)
             }
 
@@ -83,7 +83,7 @@ struct RoutineEditorView: View {
                 }
             }
         }
-        .navigationTitle(isEditing ? "Edit Routine" : "New Routine")
+        .navigationTitle(isEditing ? "Edit Plan" : "New Plan")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {

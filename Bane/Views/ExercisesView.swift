@@ -25,8 +25,8 @@ struct ExercisesView: View {
                 }
             }
         }
-        .navigationTitle("Exercises")
-        .searchable(text: $searchText, prompt: "Search exercises")
+        .navigationTitle("Lifts")
+        .searchable(text: $searchText, prompt: "Search lifts")
         .overlay {
             if filteredExercises.isEmpty {
                 emptyState
@@ -37,7 +37,7 @@ struct ExercisesView: View {
                 Button {
                     isPresentingAdd = true
                 } label: {
-                    Label("Add Exercise", systemImage: "plus")
+                    Label("Add Lift", systemImage: "plus")
                 }
             }
         }
@@ -76,9 +76,9 @@ struct ExercisesView: View {
     private var emptyState: some View {
         if searchText.isEmpty {
             ContentUnavailableView(
-                "No Exercises",
+                "No Lifts",
                 systemImage: "figure.strengthtraining.traditional",
-                description: Text("Add a custom exercise with the + button.")
+                description: Text("Add a custom lift with the + button.")
             )
         } else {
             ContentUnavailableView.search(text: searchText)

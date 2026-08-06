@@ -66,13 +66,13 @@ struct RoutinesView: View {
                     Button {
                         activeSheet = .edit(routine)
                     } label: {
-                        Label("Edit Routine", systemImage: "pencil")
+                        Label("Edit Plan", systemImage: "pencil")
                     }
                 }
             }
             .onDelete(perform: delete)
         }
-        .navigationTitle("Routines")
+        .navigationTitle("Plans")
         .overlay {
             if routines.isEmpty {
                 emptyState
@@ -90,7 +90,7 @@ struct RoutinesView: View {
                 Button {
                     activeSheet = .new
                 } label: {
-                    Label("Add Routine", systemImage: "plus")
+                    Label("Add Plan", systemImage: "plus")
                 }
             }
         }
@@ -124,9 +124,9 @@ struct RoutinesView: View {
 
     private var emptyState: some View {
         ContentUnavailableView(
-            "No Routines Yet",
+            "No Plans Yet",
             systemImage: "list.bullet.rectangle",
-            description: Text("Tap + to create a workout routine.")
+            description: Text("Tap + to create a plan.")
         )
     }
 
