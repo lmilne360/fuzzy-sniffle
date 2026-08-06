@@ -169,6 +169,7 @@ struct ActiveWorkoutView: View {
 
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.banePalette) private var palette
 
     /// Newest first, so ``currentBodyWeight`` is the most recently recorded
     /// value.
@@ -238,8 +239,13 @@ struct ActiveWorkoutView: View {
                     } label: {
                         Label("Add Exercise", systemImage: "plus.circle.fill")
                     }
+                    .tint(palette.accent)
+                    .listRowBackground(palette.surface)
                 }
             }
+            .listRowSeparatorTint(palette.line)
+            .scrollContentBackground(.hidden)
+            .background(palette.bg)
             .navigationTitle("Workout")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -256,6 +262,7 @@ struct ActiveWorkoutView: View {
                     Button("Discard", role: .destructive) {
                         isConfirmingDiscard = true
                     }
+                    .tint(palette.danger)
                 }
                 ToolbarItem(placement: .topBarLeading) {
                     if workout.exercises.count > 1 {
@@ -268,6 +275,7 @@ struct ActiveWorkoutView: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Finish", action: finish)
                         .fontWeight(.semibold)
+                        .tint(palette.accent)
                         .disabled(workout.exercises.isEmpty)
                 }
             }
@@ -633,6 +641,8 @@ private struct ExerciseSection: View {
     /// Detaches this exercise from its superset. `nil` when it isn't in one.
     let onLeaveSuperset: (() -> Void)?
 
+    @Environment(\.banePalette) private var palette
+
     var body: some View {
         Section {
             TextField(
@@ -641,22 +651,28 @@ private struct ExerciseSection: View {
                 axis: .vertical
             )
             .font(.callout)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(palette.text2)
+            .listRowBackground(palette.surface)
 
             ForEach(workoutExercise.orderedSets) { set in
                 SetRow(set: set, previous: previousValues[set.id], onComplete: onComplete)
+                    .listRowBackground(palette.surface2)
             }
             .onDelete(perform: onDeleteSets)
 
             Button(action: onAddSet) {
                 Label("Add Set", systemImage: "plus")
                     .font(.callout)
+                    .foregroundStyle(palette.accent)
             }
+            .listRowBackground(palette.surface)
 
             Button(action: onAddWarmupSet) {
                 Label("Add Warm-up Set", systemImage: "flame")
                     .font(.callout)
+                    .foregroundStyle(palette.amber)
             }
+            .listRowBackground(palette.surface)
         } header: {
             VStack(alignment: .leading, spacing: 6) {
                 if let superset {
@@ -664,6 +680,8 @@ private struct ExerciseSection: View {
                 }
                 HStack {
                     Text(workoutExercise.exercise?.name ?? "Exercise")
+                        .baneHeading(13)
+                        .foregroundStyle(palette.text2)
                     Spacer()
                     warmupButton
                     swapButton
@@ -671,6 +689,7 @@ private struct ExerciseSection: View {
                     restMenu
                     Button(role: .destructive, action: onRemoveExercise) {
                         Image(systemName: "trash")
+                            .foregroundStyle(palette.danger)
                     }
                     .buttonStyle(.borderless)
                     .accessibilityLabel("Remove exercise")
@@ -693,6 +712,7 @@ private struct ExerciseSection: View {
         Button(action: onOpenWarmups) {
             Image(systemName: "flame")
                 .font(.caption)
+                .foregroundStyle(palette.text2)
         }
         .buttonStyle(.borderless)
         .textCase(nil)
@@ -705,6 +725,7 @@ private struct ExerciseSection: View {
         Button(action: onSwap) {
             Image(systemName: "arrow.left.arrow.right")
                 .font(.caption)
+                .foregroundStyle(palette.text2)
         }
         .buttonStyle(.borderless)
         .textCase(nil)
@@ -724,12 +745,12 @@ private struct ExerciseSection: View {
             "Superset \(superset.letter) · \(superset.index) of \(superset.count)",
             systemImage: "link"
         )
-        .font(.caption2.weight(.bold))
+        .font(BaneFont.mono(11, weight: .semibold))
         .textCase(nil)
         .padding(.horizontal, 8)
         .padding(.vertical, 3)
-        .background(Color.indigo.opacity(0.18), in: Capsule())
-        .foregroundStyle(Color.indigo)
+        .background(palette.steel.opacity(0.18), in: Capsule())
+        .foregroundStyle(palette.steel)
         .accessibilityLabel(
             "Superset \(superset.letter), exercise \(superset.index) of \(superset.count)"
         )
@@ -758,6 +779,7 @@ private struct ExerciseSection: View {
             } label: {
                 Image(systemName: "link")
                     .font(.caption)
+                    .foregroundStyle(palette.text2)
             }
             .buttonStyle(.borderless)
             .textCase(nil)
@@ -782,6 +804,7 @@ private struct ExerciseSection: View {
                 Label(restLabel(for: exercise), systemImage: "timer")
                     .font(.caption)
                     .labelStyle(.titleAndIcon)
+                    .foregroundStyle(palette.text2)
             }
             .buttonStyle(.borderless)
             .textCase(nil)
@@ -821,6 +844,8 @@ private struct SetRow: View {
     /// Drives the per-set plate-calculator sheet.
     @State private var isShowingPlateCalculator = false
 
+    @Environment(\.banePalette) private var palette
+
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             fields
@@ -837,13 +862,13 @@ private struct SetRow: View {
                 set.isWarmup.toggle()
             } label: {
                 Text(set.isWarmup ? "W" : "\(set.order + 1)")
-                    .font(.subheadline.weight(.semibold).monospacedDigit())
+                    .font(BaneFont.mono(13, weight: .semibold))
                     .frame(width: 26, height: 26)
                     .background(
-                        set.isWarmup ? Color.orange.opacity(0.2) : Color.secondary.opacity(0.15),
+                        set.isWarmup ? palette.amber.opacity(0.2) : palette.surface3,
                         in: Circle()
                     )
-                    .foregroundStyle(set.isWarmup ? Color.orange : .secondary)
+                    .foregroundStyle(set.isWarmup ? palette.amber : palette.text3)
             }
             .buttonStyle(.plain)
             .accessibilityLabel(set.isWarmup ? "Warm-up set" : "Working set \(set.order + 1)")
@@ -866,7 +891,7 @@ private struct SetRow: View {
             } label: {
                 Image(systemName: "circle.grid.2x1.fill")
                     .font(.body)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(palette.text3)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Plate calculator")
@@ -876,9 +901,18 @@ private struct SetRow: View {
                 set.completed.toggle()
                 if set.completed { onComplete(set) }
             } label: {
-                Image(systemName: set.completed ? "checkmark.circle.fill" : "circle")
-                    .font(.title2)
-                    .foregroundStyle(set.completed ? Color.green : .secondary)
+                ZStack {
+                    RoundedRectangle(cornerRadius: 2, style: .continuous)
+                        .fill(set.completed ? palette.accent : .clear)
+                    RoundedRectangle(cornerRadius: 2, style: .continuous)
+                        .strokeBorder(set.completed ? .clear : palette.lineStrong, lineWidth: 1)
+                    if set.completed {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(palette.onAccent)
+                    }
+                }
+                .frame(width: 26, height: 26)
             }
             .buttonStyle(.plain)
             .accessibilityLabel(set.completed ? "Completed" : "Not completed")
@@ -894,8 +928,8 @@ private struct SetRow: View {
     private func previousLabel(_ previous: PreviousSession.SetValue) -> some View {
         let weight = WeightFormat.weight(previous.weight, in: weightUnit)
         return Text("Last time: \(previous.reps) × \(weight)")
-            .font(.caption2)
-            .foregroundStyle(.tertiary)
+            .font(BaneFont.mono(11))
+            .foregroundStyle(palette.text3)
             .padding(.leading, 38)
             .accessibilityLabel("Last time \(previous.reps) reps at \(weight)")
     }
@@ -904,11 +938,17 @@ private struct SetRow: View {
     private func fieldColumn(title: String, @ViewBuilder field: () -> some View) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(title)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+                .font(BaneFont.mono(10))
+                .textCase(.uppercase)
+                .tracking(0.6)
+                .foregroundStyle(palette.text3)
             field()
+                .font(BaneFont.mono(15, weight: .medium))
+                .foregroundStyle(palette.text)
                 .multilineTextAlignment(.leading)
-                .textFieldStyle(.roundedBorder)
+                .padding(.horizontal, 8)
+                .frame(height: 34)
+                .background(palette.surface3, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -918,8 +958,10 @@ private struct SetRow: View {
     private var rpeColumn: some View {
         VStack(alignment: .leading, spacing: 2) {
             Text("RPE")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+                .font(BaneFont.mono(10))
+                .textCase(.uppercase)
+                .tracking(0.6)
+                .foregroundStyle(palette.text3)
             Menu {
                 Picker("RPE", selection: $set.rpe) {
                     Text("—").tag(Double?.none)
@@ -929,9 +971,10 @@ private struct SetRow: View {
                 }
             } label: {
                 Text(set.rpe.map(RPEScale.label) ?? "—")
-                    .font(.body)
-                    .frame(maxWidth: .infinity, minHeight: 30)
-                    .background(Color.secondary.opacity(0.12), in: .rect(cornerRadius: 6))
+                    .font(BaneFont.mono(15, weight: .medium))
+                    .foregroundStyle(palette.text)
+                    .frame(maxWidth: .infinity, minHeight: 34)
+                    .background(palette.surface3, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
             }
             .buttonStyle(.plain)
         }

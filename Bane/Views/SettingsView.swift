@@ -11,6 +11,11 @@ struct SettingsView: View {
     /// pounds. Changing this re-renders every weight surface live.
     @AppStorage(WeightPreferences.unitKey) private var weightUnit = WeightPreferences.fallback
 
+    /// The active design-system shell — Bane (venom green) or Batman (gold).
+    /// Read at the app root and injected into the environment, so this picker
+    /// recolors the whole app live.
+    @AppStorage(ThemePreferences.themeKey) private var theme = ThemePreferences.fallback
+
     // Opt-in workout reminders. Global (not per-routine) UserDefaults-backed
     // state; changing any of these reschedules the local notifications.
     @AppStorage(ReminderPreferences.enabledKey)
@@ -39,6 +44,19 @@ struct SettingsView: View {
                 Text("Units")
             } footer: {
                 Text("Applies to every weight shown or entered. Values are stored in pounds and converted for display.")
+            }
+
+            Section {
+                Picker("Theme", selection: $theme) {
+                    ForEach(BaneTheme.allCases) { theme in
+                        Text(theme.displayName).tag(theme)
+                    }
+                }
+                .pickerStyle(.segmented)
+            } header: {
+                Text("Theme")
+            } footer: {
+                Text("Bane is the near-black, venom-green shell. Batman swaps in a colder navy-black with a gold accent.")
             }
 
             remindersSection

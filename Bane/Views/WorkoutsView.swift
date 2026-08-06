@@ -9,6 +9,7 @@ import SwiftUI
 /// breakdown of every exercise and logged set.
 struct WorkoutsView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.banePalette) private var palette
     @Query(sort: \Workout.date, order: .reverse) private var workouts: [Workout]
 
     /// The workout currently presented full-screen for logging.
@@ -26,29 +27,38 @@ struct WorkoutsView: View {
     var body: some View {
         List {
             if !inProgress.isEmpty {
-                Section("In Progress") {
+                Section {
                     ForEach(inProgress) { workout in
                         Button {
                             activeWorkout = workout
                         } label: {
                             WorkoutRow(workout: workout)
                         }
+                        .listRowBackground(palette.surface)
                     }
+                } header: {
+                    Text("In Progress").baneLabel().foregroundStyle(palette.text3)
                 }
             }
 
             if !finished.isEmpty {
-                Section("History") {
+                Section {
                     ForEach(finished) { workout in
                         NavigationLink {
                             WorkoutDetailView(workout: workout)
                         } label: {
                             WorkoutRow(workout: workout)
                         }
+                        .listRowBackground(palette.surface)
                     }
+                } header: {
+                    Text("History").baneLabel().foregroundStyle(palette.text3)
                 }
             }
         }
+        .listRowSeparatorTint(palette.line)
+        .scrollContentBackground(.hidden)
+        .background(palette.bg)
         .navigationTitle("Workouts")
         .overlay {
             if workouts.isEmpty {
@@ -111,10 +121,8 @@ struct WorkoutsView: View {
         } description: {
             Text("Start a workout to log your sets, reps, and weight.")
         } actions: {
-            Button(action: startWorkout) {
-                Text("Start Workout")
-            }
-            .buttonStyle(.borderedProminent)
+            Button("Start Workout", action: startWorkout)
+                .buttonStyle(.bane(.primary))
         }
     }
 
@@ -134,29 +142,27 @@ private struct WorkoutRow: View {
 
     /// The unit volume totals are shown in; storage stays pounds.
     @AppStorage(WeightPreferences.unitKey) private var weightUnit = WeightPreferences.fallback
+    @Environment(\.banePalette) private var palette
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Text(workout.displayName)
-                    .font(.headline)
+                    .font(BaneFont.heading(16))
+                    .foregroundStyle(palette.text)
                 Spacer()
                 if !workout.isFinished {
-                    Text("In Progress")
-                        .font(.caption2.weight(.semibold))
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Color.accentColor.opacity(0.15), in: Capsule())
-                        .foregroundStyle(Color.accentColor)
+                    BaneBadge(text: "In Progress", kind: .accent)
                 }
             }
             Text(workout.date, format: .dateTime.weekday().month().day())
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .font(BaneFont.mono(12))
+                .foregroundStyle(palette.text2)
             Text(summary)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(BaneFont.mono(11))
+                .foregroundStyle(palette.text3)
         }
+        .padding(.vertical, 2)
     }
 
     /// A `·`-separated summary. Finished sessions lead with duration and total

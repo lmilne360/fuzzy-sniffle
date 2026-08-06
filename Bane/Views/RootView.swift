@@ -5,6 +5,7 @@ import SwiftUI
 /// wrapped in its own `NavigationStack` so navigation state is scoped per tab.
 struct RootView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.banePalette) private var palette
 
     /// Presents workouts started via Siri/Shortcuts App Intents, which run
     /// outside the view hierarchy and hand off through this coordinator.
@@ -82,6 +83,9 @@ struct RootView: View {
                 Label("Settings", systemImage: "gearshape")
             }
         }
+        .toolbarBackground(palette.surface, for: .tabBar)
+        .toolbarBackground(.visible, for: .tabBar)
+        .toolbarColorScheme(.dark, for: .tabBar)
         .task {
             // Seed the built-in exercise library once, on first launch.
             ExerciseLibrary.seedIfNeeded(in: modelContext)
