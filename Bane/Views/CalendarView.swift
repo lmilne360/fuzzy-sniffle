@@ -9,6 +9,7 @@ import SwiftUI
 /// page between months with the chevrons; days with a finished workout are
 /// filled with the accent color, and today is ringed.
 struct CalendarView: View {
+    @Environment(\.banePalette) private var palette
     @Query(sort: \Workout.date) private var workouts: [Workout]
 
     /// The first day of the month currently displayed. Defaults to this month on
@@ -26,7 +27,7 @@ struct CalendarView: View {
             .padding()
         }
         .navigationTitle("Calendar")
-        .background(Color(.systemGroupedBackground))
+        .background(palette.bg)
         .overlay {
             if trainingDays.isEmpty {
                 emptyState
@@ -42,40 +43,17 @@ struct CalendarView: View {
     private var streakCard: some View {
         let streaks = WorkoutStreaks.streaks(in: workouts, calendar: calendar)
         return HStack(spacing: 12) {
-            streakStat(
-                title: "Current Streak",
-                value: streaks.current,
-                systemImage: "flame.fill",
-                tint: streaks.current > 0 ? .orange : .secondary
+            BaneStatTile(
+                label: "Current Streak",
+                value: "\(streaks.current)",
+                unit: streaks.current == 1 ? "day" : "days"
             )
-            streakStat(
-                title: "Best Streak",
-                value: streaks.best,
-                systemImage: "trophy.fill",
-                tint: streaks.best > 0 ? .yellow : .secondary
+            BaneStatTile(
+                label: "Best Streak",
+                value: "\(streaks.best)",
+                unit: streaks.best == 1 ? "day" : "days"
             )
         }
-    }
-
-    private func streakStat(title: String, value: Int, systemImage: String, tint: Color) -> some View {
-        VStack(spacing: 6) {
-            Image(systemName: systemImage)
-                .font(.title2)
-                .foregroundStyle(tint)
-            Text("\(value)")
-                .font(.title.weight(.bold))
-                .monospacedDigit()
-            Text(value == 1 ? "day" : "days")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Text(title)
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .textCase(.uppercase)
-        }
-        .frame(maxWidth: .infinity)
-        .padding()
-        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12))
     }
 
     // MARK: Month grid
@@ -87,7 +65,11 @@ struct CalendarView: View {
             monthGrid
         }
         .padding()
-        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12))
+        .background(palette.surface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(palette.line, lineWidth: 1)
+        )
     }
 
     private var monthHeader: some View {
@@ -97,13 +79,15 @@ struct CalendarView: View {
             } label: {
                 Image(systemName: "chevron.left")
                     .font(.headline)
+                    .foregroundStyle(palette.accent)
             }
             .accessibilityLabel("Previous month")
 
             Spacer()
 
             Text(visibleMonth, format: .dateTime.month(.wide).year())
-                .font(.headline)
+                .baneHeading(15)
+                .foregroundStyle(palette.text)
 
             Spacer()
 
@@ -112,6 +96,7 @@ struct CalendarView: View {
             } label: {
                 Image(systemName: "chevron.right")
                     .font(.headline)
+                    .foregroundStyle(palette.accent)
             }
             .accessibilityLabel("Next month")
             .disabled(isDisplayingCurrentMonth)
@@ -122,8 +107,8 @@ struct CalendarView: View {
         HStack(spacing: 0) {
             ForEach(weekdaySymbols, id: \.self) { symbol in
                 Text(symbol)
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                    .font(BaneFont.mono(11, weight: .semibold))
+                    .foregroundStyle(palette.text3)
                     .frame(maxWidth: .infinity)
             }
         }
@@ -146,19 +131,18 @@ struct CalendarView: View {
         let isTrained = trainingDays.contains(calendar.startOfDay(for: day))
         let isToday = calendar.isDateInToday(day)
         return Text("\(calendar.component(.day, from: day))")
-            .font(.callout)
-            .monospacedDigit()
-            .foregroundStyle(isTrained ? Color.white : .primary)
+            .font(BaneFont.mono(15))
+            .foregroundStyle(isTrained ? palette.onAccent : palette.text)
             .frame(maxWidth: .infinity)
             .frame(height: 40)
             .background {
                 if isTrained {
-                    Circle().fill(Color.accentColor)
+                    Circle().fill(palette.accent)
                 }
             }
             .overlay {
                 if isToday {
-                    Circle().strokeBorder(Color.accentColor, lineWidth: isTrained ? 0 : 1.5)
+                    Circle().strokeBorder(palette.accent, lineWidth: isTrained ? 0 : 1.5)
                 }
             }
     }

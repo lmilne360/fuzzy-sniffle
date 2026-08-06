@@ -29,6 +29,7 @@ enum ExerciseAlternatives {
 struct ExercisePickerView: View {
     @Query(sort: \Exercise.name) private var exercises: [Exercise]
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.banePalette) private var palette
 
     @State private var searchText = ""
 
@@ -60,6 +61,9 @@ struct ExercisePickerView: View {
                 }
             }
         }
+        .listRowSeparatorTint(palette.line)
+        .scrollContentBackground(.hidden)
+        .background(palette.bg)
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
         .searchable(text: $searchText, prompt: "Search exercises")
@@ -84,14 +88,17 @@ struct ExercisePickerView: View {
             row(for: exercise)
         }
         .buttonStyle(.plain)
+        .listRowBackground(palette.surface)
     }
 
     private func row(for exercise: Exercise) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(exercise.name)
+                .font(BaneFont.body(15))
+                .foregroundStyle(palette.text)
             Text("\(exercise.primaryMuscle.displayName) · \(exercise.equipment.displayName)")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(BaneFont.mono(11))
+                .foregroundStyle(palette.text3)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())

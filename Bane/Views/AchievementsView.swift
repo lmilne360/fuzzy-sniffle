@@ -10,6 +10,7 @@ import SwiftUI
 /// seen since last visit) are flagged "New" via ``AchievementsSeenStore``.
 struct AchievementsView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.banePalette) private var palette
     @Query(sort: \Workout.date) private var workouts: [Workout]
     @Query private var records: [PersonalRecord]
 
@@ -35,7 +36,7 @@ struct AchievementsView: View {
             .padding()
         }
         .navigationTitle("Achievements")
-        .background(Color(.systemGroupedBackground))
+        .background(palette.bg)
         .task { PersonalRecordsService.refresh(in: modelContext) }
         .onAppear {
             let earned = Set(achievements.filter(\.isEarned).map(\.id))
@@ -48,40 +49,17 @@ struct AchievementsView: View {
     private var streakCard: some View {
         let streaks = WorkoutStreaks.streaks(in: workouts, calendar: calendar)
         return HStack(spacing: 12) {
-            streakStat(
-                title: "Current Streak",
-                value: streaks.current,
-                systemImage: "flame.fill",
-                tint: streaks.current > 0 ? .orange : .secondary
+            BaneStatTile(
+                label: "Current Streak",
+                value: "\(streaks.current)",
+                unit: streaks.current == 1 ? "day" : "days"
             )
-            streakStat(
-                title: "Best Streak",
-                value: streaks.best,
-                systemImage: "trophy.fill",
-                tint: streaks.best > 0 ? .yellow : .secondary
+            BaneStatTile(
+                label: "Best Streak",
+                value: "\(streaks.best)",
+                unit: streaks.best == 1 ? "day" : "days"
             )
         }
-    }
-
-    private func streakStat(title: String, value: Int, systemImage: String, tint: Color) -> some View {
-        VStack(spacing: 6) {
-            Image(systemName: systemImage)
-                .font(.title2)
-                .foregroundStyle(tint)
-            Text("\(value)")
-                .font(.title.weight(.bold))
-                .monospacedDigit()
-            Text(value == 1 ? "day" : "days")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Text(title)
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .textCase(.uppercase)
-        }
-        .frame(maxWidth: .infinity)
-        .padding()
-        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12))
     }
 
     // MARK: Badge sections
@@ -90,12 +68,11 @@ struct AchievementsView: View {
         let earned = achievements.filter(\.isEarned).count
         return VStack(spacing: 4) {
             Text("\(earned) of \(achievements.count)")
-                .font(.title2.weight(.bold))
-                .monospacedDigit()
+                .font(BaneFont.display(28))
+                .foregroundStyle(palette.text)
             Text("badges earned")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .textCase(.uppercase)
+                .baneLabel()
+                .foregroundStyle(palette.text3)
         }
         .frame(maxWidth: .infinity)
     }
@@ -105,7 +82,8 @@ struct AchievementsView: View {
         let columns = Array(repeating: GridItem(.flexible(), spacing: 12), count: 3)
         return VStack(alignment: .leading, spacing: 12) {
             Text(category.title)
-                .font(.headline)
+                .baneHeading(13)
+                .foregroundStyle(palette.text)
             LazyVGrid(columns: columns, spacing: 12) {
                 ForEach(items) { achievement in
                     BadgeTile(achievement: achievement, isNew: newlyEarned.contains(achievement.id))
@@ -121,43 +99,40 @@ private struct BadgeTile: View {
     let achievement: Achievements.Achievement
     let isNew: Bool
 
+    @Environment(\.banePalette) private var palette
+
     var body: some View {
         VStack(spacing: 8) {
             ZStack {
                 Circle()
-                    .fill(achievement.isEarned ? Color.accentColor.opacity(0.15) : Color(.tertiarySystemFill))
+                    .fill(achievement.isEarned ? palette.accentWash : palette.surface3)
                     .frame(width: 60, height: 60)
 
                 if !achievement.isEarned {
                     Circle()
                         .trim(from: 0, to: achievement.progress)
-                        .stroke(Color.accentColor, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                        .stroke(palette.accent, style: StrokeStyle(lineWidth: 3, lineCap: .round))
                         .rotationEffect(.degrees(-90))
                         .frame(width: 60, height: 60)
                 }
 
                 Image(systemName: achievement.systemImage)
                     .font(.title2)
-                    .foregroundStyle(achievement.isEarned ? Color.accentColor : .secondary)
+                    .foregroundStyle(achievement.isEarned ? palette.accent : palette.text3)
             }
 
             Text(achievement.title)
-                .font(.caption.weight(.medium))
+                .font(BaneFont.body(12))
+                .fontWeight(.medium)
                 .multilineTextAlignment(.center)
-                .foregroundStyle(achievement.isEarned ? .primary : .secondary)
+                .foregroundStyle(achievement.isEarned ? palette.text : palette.text3)
 
             if isNew {
-                Text("New")
-                    .font(.caption2.weight(.bold))
-                    .textCase(.uppercase)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(Color.accentColor, in: Capsule())
-                    .foregroundStyle(.white)
+                BaneBadge(text: "New", kind: .solid)
             } else if let progressText = achievement.progressText {
                 Text(progressText)
-                    .font(.caption2.monospacedDigit())
-                    .foregroundStyle(.secondary)
+                    .font(BaneFont.mono(10))
+                    .foregroundStyle(palette.text3)
             }
         }
         .frame(maxWidth: .infinity)

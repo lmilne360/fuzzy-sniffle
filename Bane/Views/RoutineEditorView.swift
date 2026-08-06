@@ -13,6 +13,7 @@ import SwiftUI
 struct RoutineEditorView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.banePalette) private var palette
 
     /// The routine being edited, or `nil` when creating a new one.
     private let routine: Routine?
@@ -83,6 +84,8 @@ struct RoutineEditorView: View {
                 }
             }
         }
+        .scrollContentBackground(.hidden)
+        .background(palette.bg)
         .navigationTitle(isEditing ? "Edit Plan" : "New Plan")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -204,14 +207,17 @@ private struct DraftItemRow: View {
 
     /// The unit the weight increment is displayed and entered in; storage stays pounds.
     @AppStorage(WeightPreferences.unitKey) private var weightUnit = WeightPreferences.fallback
+    @Environment(\.banePalette) private var palette
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.exercise.name)
+                    .font(BaneFont.heading(15))
+                    .foregroundStyle(palette.text)
                 Text("\(item.exercise.primaryMuscle.displayName) · \(item.exercise.equipment.displayName)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(BaneFont.mono(11))
+                    .foregroundStyle(palette.text3)
             }
 
             if showProgressionFields {
@@ -299,14 +305,15 @@ private struct DraftSetRow: View {
 
     /// The unit target weights are displayed and entered in; storage stays pounds.
     @AppStorage(WeightPreferences.unitKey) private var weightUnit = WeightPreferences.fallback
+    @Environment(\.banePalette) private var palette
 
     var body: some View {
         HStack(spacing: 12) {
             Text("\(number)")
-                .font(.subheadline.weight(.semibold).monospacedDigit())
+                .font(BaneFont.mono(13, weight: .semibold))
                 .frame(width: 26, height: 26)
-                .background(Color.secondary.opacity(0.15), in: Circle())
-                .foregroundStyle(.secondary)
+                .background(palette.surface3, in: Circle())
+                .foregroundStyle(palette.text3)
 
             fieldColumn(title: "Reps") {
                 TextField("0", value: $set.targetReps, format: .number)

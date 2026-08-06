@@ -9,6 +9,7 @@ import SwiftUI
 /// field. Entries can be swiped away.
 struct MeasurementsView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.banePalette) private var palette
     @Query(sort: \BodyMeasurement.date, order: .reverse) private var measurements: [BodyMeasurement]
 
     @State private var isAddingMeasurement = false
@@ -27,9 +28,13 @@ struct MeasurementsView: View {
                 } label: {
                     MeasurementRow(measurement: measurement)
                 }
+                .listRowBackground(palette.surface)
             }
             .onDelete(perform: delete)
         }
+        .listRowSeparatorTint(palette.line)
+        .scrollContentBackground(.hidden)
+        .background(palette.bg)
         .navigationTitle("Measurements")
         .toolbar {
             #if canImport(HealthKit)
@@ -127,15 +132,17 @@ private struct MeasurementRow: View {
 
     /// The unit bodyweight is shown in; storage stays pounds.
     @AppStorage(WeightPreferences.unitKey) private var weightUnit = WeightPreferences.fallback
+    @Environment(\.banePalette) private var palette
 
     var body: some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
                 Text(measurement.date, format: .dateTime.year().month().day())
-                    .font(.body.weight(.medium))
+                    .font(BaneFont.heading(15))
+                    .foregroundStyle(palette.text)
                 Text("\(measurement.recordedFields.count) metric\(measurement.recordedFields.count == 1 ? "" : "s")")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(BaneFont.mono(11))
+                    .foregroundStyle(palette.text3)
             }
 
             Spacer()
@@ -152,10 +159,11 @@ private struct MeasurementRow: View {
     private func summaryMetric(_ value: String, caption: String) -> some View {
         VStack(alignment: .trailing, spacing: 2) {
             Text(value)
-                .font(.headline.monospacedDigit())
+                .font(BaneFont.mono(15, weight: .semibold))
+                .foregroundStyle(palette.accent)
             Text(caption)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+                .font(BaneFont.mono(10))
+                .foregroundStyle(palette.text3)
         }
         .padding(.leading, 12)
     }
@@ -167,6 +175,7 @@ struct MeasurementDetailView: View {
 
     /// The unit bodyweight is shown in; storage stays pounds.
     @AppStorage(WeightPreferences.unitKey) private var weightUnit = WeightPreferences.fallback
+    @Environment(\.banePalette) private var palette
 
     var body: some View {
         List {
@@ -175,18 +184,23 @@ struct MeasurementDetailView: View {
                     if let value = field.value {
                         LabeledContent(field.label) {
                             Text(displayValue(field.label, value))
-                                .monospacedDigit()
+                                .font(BaneFont.mono(15))
                         }
                     }
                 }
             }
+            .listRowBackground(palette.surface)
 
             if !measurement.notes.isEmpty {
                 Section("Notes") {
                     Text(measurement.notes)
                 }
+                .listRowBackground(palette.surface)
             }
         }
+        .listRowSeparatorTint(palette.line)
+        .scrollContentBackground(.hidden)
+        .background(palette.bg)
         .navigationTitle(measurement.date.formatted(.dateTime.year().month().day()))
         .navigationBarTitleDisplayMode(.inline)
     }

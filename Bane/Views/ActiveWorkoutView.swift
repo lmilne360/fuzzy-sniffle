@@ -683,16 +683,7 @@ private struct ExerciseSection: View {
                         .baneHeading(13)
                         .foregroundStyle(palette.text2)
                     Spacer()
-                    warmupButton
-                    swapButton
-                    supersetMenu
-                    restMenu
-                    Button(role: .destructive, action: onRemoveExercise) {
-                        Image(systemName: "trash")
-                            .foregroundStyle(palette.danger)
-                    }
-                    .buttonStyle(.borderless)
-                    .accessibilityLabel("Remove exercise")
+                    actionMenu
                 }
             }
         } footer: {
@@ -705,31 +696,6 @@ private struct ExerciseSection: View {
                 .textCase(nil)
             }
         }
-    }
-
-    /// A flame button that opens the warm-up calculator for this exercise.
-    private var warmupButton: some View {
-        Button(action: onOpenWarmups) {
-            Image(systemName: "flame")
-                .font(.caption)
-                .foregroundStyle(palette.text2)
-        }
-        .buttonStyle(.borderless)
-        .textCase(nil)
-        .accessibilityLabel("Add warm-up sets")
-    }
-
-    /// A button that opens the alternatives picker to swap this exercise for
-    /// another training the same muscle, keeping the logged sets.
-    private var swapButton: some View {
-        Button(action: onSwap) {
-            Image(systemName: "arrow.left.arrow.right")
-                .font(.caption)
-                .foregroundStyle(palette.text2)
-        }
-        .buttonStyle(.borderless)
-        .textCase(nil)
-        .accessibilityLabel("Swap exercise")
     }
 
     /// What the user did last session, keyed by current set id, for the "last
@@ -756,60 +722,50 @@ private struct ExerciseSection: View {
         )
     }
 
-    /// Grouping controls: link this exercise with the one below, or leave the
-    /// current superset. Hidden entirely when neither action is available.
-    @ViewBuilder
-    private var supersetMenu: some View {
-        if onSupersetWithNext != nil || onLeaveSuperset != nil {
-            Menu {
-                if let onSupersetWithNext {
-                    Button {
-                        onSupersetWithNext()
-                    } label: {
-                        Label("Superset with Next", systemImage: "link")
-                    }
-                }
-                if let onLeaveSuperset {
-                    Button(role: .destructive) {
-                        onLeaveSuperset()
-                    } label: {
-                        Label("Remove from Superset", systemImage: "minus.circle")
-                    }
-                }
-            } label: {
-                Image(systemName: "link")
-                    .font(.caption)
-                    .foregroundStyle(palette.text2)
+    /// The single overflow menu for this exercise: warm-up, swap, superset
+    /// grouping, rest override, and remove — replacing what used to be five
+    /// separate icon buttons crowding the header row.
+    private var actionMenu: some View {
+        Menu {
+            Button(action: onOpenWarmups) {
+                Label("Add Warm-up Sets", systemImage: "flame")
             }
-            .buttonStyle(.borderless)
-            .textCase(nil)
-            .accessibilityLabel("Superset options")
-        }
-    }
-
-    /// Per-exercise rest override: pick a preset, or fall back to the app-wide
-    /// default. Writes straight through to the referenced `Exercise`.
-    @ViewBuilder
-    private var restMenu: some View {
-        if let exercise = workoutExercise.exercise {
-            Menu {
-                Picker("Rest", selection: restBinding(for: exercise)) {
-                    Text("Default (\(RestDurations.label(defaultRestSeconds)))")
-                        .tag(Int?.none)
-                    ForEach(RestDurations.presets, id: \.self) { seconds in
-                        Text(RestDurations.label(seconds)).tag(Int?.some(seconds))
-                    }
-                }
-            } label: {
-                Label(restLabel(for: exercise), systemImage: "timer")
-                    .font(.caption)
-                    .labelStyle(.titleAndIcon)
-                    .foregroundStyle(palette.text2)
+            Button(action: onSwap) {
+                Label("Swap Exercise", systemImage: "arrow.left.arrow.right")
             }
-            .buttonStyle(.borderless)
-            .textCase(nil)
-            .accessibilityLabel("Rest duration for this exercise")
+            if let onSupersetWithNext {
+                Button(action: onSupersetWithNext) {
+                    Label("Superset with Next", systemImage: "link")
+                }
+            }
+            if let onLeaveSuperset {
+                Button(role: .destructive, action: onLeaveSuperset) {
+                    Label("Remove from Superset", systemImage: "minus.circle")
+                }
+            }
+            if let exercise = workoutExercise.exercise {
+                Menu {
+                    Picker("Rest", selection: restBinding(for: exercise)) {
+                        Text("Default (\(RestDurations.label(defaultRestSeconds)))")
+                            .tag(Int?.none)
+                        ForEach(RestDurations.presets, id: \.self) { seconds in
+                            Text(RestDurations.label(seconds)).tag(Int?.some(seconds))
+                        }
+                    }
+                } label: {
+                    Label("Rest: \(restLabel(for: exercise))", systemImage: "timer")
+                }
+            }
+            Divider()
+            Button(role: .destructive, action: onRemoveExercise) {
+                Label("Remove Exercise", systemImage: "trash")
+            }
+        } label: {
+            Image(systemName: "ellipsis.circle")
+                .font(.callout)
+                .foregroundStyle(palette.text2)
         }
+        .accessibilityLabel("Exercise actions")
     }
 
     /// A binding to the exercise's optional rest override for the picker.

@@ -7,6 +7,8 @@ import SwiftUI
 /// iCloud-sync, and data-export screens, which are also reachable from the
 /// Workouts tab toolbar.
 struct SettingsView: View {
+    @Environment(\.banePalette) private var palette
+
     /// The unit weights are displayed and entered in everywhere; storage stays
     /// pounds. Changing this re-renders every weight surface live.
     @AppStorage(WeightPreferences.unitKey) private var weightUnit = WeightPreferences.fallback
@@ -79,6 +81,8 @@ struct SettingsView: View {
                 }
             }
         }
+        .scrollContentBackground(.hidden)
+        .background(palette.bg)
         .navigationTitle("Settings")
         .sheet(isPresented: $isShowingRestSettings) {
             RestSettingsView()
@@ -168,6 +172,8 @@ struct SettingsView: View {
 private struct WeekdaySelector: View {
     @Binding var mask: Int
 
+    @Environment(\.banePalette) private var palette
+
     var body: some View {
         HStack(spacing: 6) {
             ForEach(Weekday.allCases) { day in
@@ -180,13 +186,13 @@ private struct WeekdaySelector: View {
                     }
                 } label: {
                     Text(day.shortSymbol)
-                        .font(.footnote.weight(.semibold))
+                        .font(BaneFont.mono(12, weight: .semibold))
                         .frame(maxWidth: .infinity, minHeight: 34)
                         .background(
-                            isSelected ? Color.accentColor : Color(.secondarySystemFill),
+                            isSelected ? palette.accent : palette.surface3,
                             in: Capsule()
                         )
-                        .foregroundStyle(isSelected ? Color.white : Color.primary)
+                        .foregroundStyle(isSelected ? palette.onAccent : palette.text)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(day.displayName)

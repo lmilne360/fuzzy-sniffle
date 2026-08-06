@@ -12,6 +12,7 @@ struct ExerciseDetailView: View {
     let exercise: Exercise
 
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.banePalette) private var palette
     @Query private var allRecords: [PersonalRecord]
 
     var body: some View {
@@ -19,6 +20,7 @@ struct ExerciseDetailView: View {
             Section {
                 metadata
             }
+            .listRowBackground(palette.surface)
 
             Section("Personal Records") {
                 if records.isEmpty {
@@ -31,9 +33,13 @@ struct ExerciseDetailView: View {
                     ForEach(records) { record in
                         PersonalRecordRow(record: record)
                     }
+                    .listRowBackground(palette.surface)
                 }
             }
         }
+        .listRowSeparatorTint(palette.line)
+        .scrollContentBackground(.hidden)
+        .background(palette.bg)
         .navigationTitle(exercise.name)
         .navigationBarTitleDisplayMode(.inline)
         .task { PersonalRecordsService.refresh(in: modelContext) }
@@ -51,19 +57,15 @@ struct ExerciseDetailView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text(exercise.name)
-                    .font(.title3.weight(.semibold))
+                    .font(BaneFont.heading(19))
+                    .foregroundStyle(palette.text)
                 if exercise.isCustom {
-                    Text("Custom")
-                        .font(.caption2.weight(.semibold))
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Color.accentColor.opacity(0.15), in: Capsule())
-                        .foregroundStyle(Color.accentColor)
+                    BaneBadge(text: "Custom", kind: .accent)
                 }
             }
             Text("\(exercise.category.displayName) · \(exercise.primaryMuscle.displayName) · \(exercise.equipment.displayName)")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .font(BaneFont.mono(12))
+                .foregroundStyle(palette.text3)
         }
         .padding(.vertical, 4)
     }
@@ -80,28 +82,31 @@ struct PersonalRecordRow: View {
 
     /// The unit record weights are shown in; storage stays pounds.
     @AppStorage(WeightPreferences.unitKey) private var weightUnit = WeightPreferences.fallback
+    @Environment(\.banePalette) private var palette
 
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: record.metric.systemImage)
                 .font(.body)
                 .frame(width: 28, height: 28)
-                .background(Color.accentColor.opacity(0.12), in: Circle())
-                .foregroundStyle(Color.accentColor)
+                .background(palette.accentWash, in: Circle())
+                .foregroundStyle(palette.accent)
                 .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(showsExerciseName ? (record.exercise?.name ?? "Exercise") : record.metric.displayName)
-                    .font(.body.weight(.medium))
+                    .font(BaneFont.heading(15))
+                    .foregroundStyle(palette.text)
                 Text("\(record.reps) reps × \(WeightFormat.weight(record.weight, in: weightUnit)) · \(record.achievedOn.formatted(.dateTime.month().day().year()))")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(BaneFont.mono(11))
+                    .foregroundStyle(palette.text3)
             }
 
             Spacer()
 
             Text(WeightFormat.weight(record.value, in: weightUnit))
-                .font(.title3.weight(.semibold).monospacedDigit())
+                .font(BaneFont.mono(17, weight: .semibold))
+                .foregroundStyle(palette.accent)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(

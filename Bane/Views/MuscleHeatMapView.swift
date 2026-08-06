@@ -9,6 +9,7 @@ import SwiftUI
 /// worked muscle. A ranked breakdown and an "undertrained" hint follow. The
 /// view is read-only over the model — it only reads logged workouts.
 struct MuscleHeatMapView: View {
+    @Environment(\.banePalette) private var palette
     @Query(sort: \Workout.date, order: .reverse) private var workouts: [Workout]
 
     @State private var window: HeatMapWindow = .month
@@ -31,7 +32,7 @@ struct MuscleHeatMapView: View {
             .padding()
         }
         .navigationTitle("Muscles")
-        .background(Color(.systemGroupedBackground))
+        .background(palette.bg)
     }
 
     // MARK: Sections
@@ -58,15 +59,16 @@ struct MuscleHeatMapView: View {
                 .frame(maxWidth: .infinity)
                 .aspectRatio(0.5, contentMode: .fit)
             Text(title)
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(.secondary)
+                .font(BaneFont.mono(12, weight: .medium))
+                .foregroundStyle(palette.text3)
         }
     }
 
     private var breakdown: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Volume by Muscle")
-                .font(.headline)
+                .baneHeading(13)
+                .foregroundStyle(palette.text)
 
             ForEach(trainedVolumes) { entry in
                 MuscleVolumeRow(
@@ -77,7 +79,11 @@ struct MuscleHeatMapView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding()
-        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12))
+        .background(palette.surface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(palette.line, lineWidth: 1)
+        )
     }
 
     @ViewBuilder
@@ -86,15 +92,19 @@ struct MuscleHeatMapView: View {
         if !names.isEmpty {
             VStack(alignment: .leading, spacing: 6) {
                 Label("Not trained this window", systemImage: "moon.zzz")
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(.secondary)
+                    .font(BaneFont.mono(12, weight: .medium))
+                    .foregroundStyle(palette.text3)
                 Text(names.joined(separator: ", "))
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .font(BaneFont.mono(11))
+                    .foregroundStyle(palette.text3)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding()
-            .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12))
+            .background(palette.surface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(palette.line, lineWidth: 1)
+            )
         }
     }
 
@@ -152,6 +162,7 @@ private struct MuscleVolumeRow: View {
 
     /// The unit the volume total is shown in; storage stays pounds.
     @AppStorage(WeightPreferences.unitKey) private var weightUnit = WeightPreferences.fallback
+    @Environment(\.banePalette) private var palette
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -160,17 +171,18 @@ private struct MuscleVolumeRow: View {
                     .fill(MuscleHeatMap.heatColor(for: fraction))
                     .frame(width: 14, height: 14)
                 Text(entry.muscle.displayName)
-                    .font(.subheadline)
+                    .font(BaneFont.body(14))
+                    .foregroundStyle(palette.text)
                 Spacer()
                 Text("\(WeightFormat.volume(entry.volume, in: weightUnit)) vol")
-                    .font(.subheadline.monospacedDigit())
-                    .foregroundStyle(.secondary)
+                    .font(BaneFont.mono(13))
+                    .foregroundStyle(palette.text2)
             }
 
             GeometryReader { geometry in
                 ZStack(alignment: .leading) {
                     Capsule()
-                        .fill(Color(.systemGray5))
+                        .fill(palette.surface3)
                     Capsule()
                         .fill(MuscleHeatMap.heatColor(for: fraction))
                         .frame(width: max(4, geometry.size.width * fraction))
@@ -179,8 +191,8 @@ private struct MuscleVolumeRow: View {
             .frame(height: 6)
 
             Text("\(entry.setCount) set\(entry.setCount == 1 ? "" : "s")")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+                .font(BaneFont.mono(10))
+                .foregroundStyle(palette.text3)
         }
     }
 }
@@ -189,11 +201,13 @@ private struct MuscleVolumeRow: View {
 
 /// A horizontal gradient legend explaining the low-to-high heat scale.
 private struct HeatLegend: View {
+    @Environment(\.banePalette) private var palette
+
     var body: some View {
         HStack(spacing: 8) {
             Text("Less")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+                .font(BaneFont.mono(10))
+                .foregroundStyle(palette.text3)
             LinearGradient(
                 colors: stride(from: 0.0, through: 1.0, by: 0.1)
                     .map { MuscleHeatMap.heatColor(for: $0) },
@@ -203,8 +217,8 @@ private struct HeatLegend: View {
             .frame(height: 8)
             .clipShape(Capsule())
             Text("More")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+                .font(BaneFont.mono(10))
+                .foregroundStyle(palette.text3)
         }
     }
 }

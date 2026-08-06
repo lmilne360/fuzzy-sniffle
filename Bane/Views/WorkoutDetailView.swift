@@ -78,17 +78,22 @@ struct WorkoutDetailView: View {
 
     /// The unit the volume total is shown in; storage stays pounds.
     @AppStorage(WeightPreferences.unitKey) private var weightUnit = WeightPreferences.fallback
+    @Environment(\.banePalette) private var palette
 
     var body: some View {
         List {
             Section {
                 summaryHeader
             }
+            .listRowBackground(palette.surface)
 
             ForEach(workout.orderedExercises) { workoutExercise in
                 ExerciseDetailSection(workoutExercise: workoutExercise)
             }
         }
+        .listRowSeparatorTint(palette.line)
+        .scrollContentBackground(.hidden)
+        .background(palette.bg)
         .navigationTitle(workout.displayName)
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -96,7 +101,8 @@ struct WorkoutDetailView: View {
     private var summaryHeader: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(workout.date, format: .dateTime.weekday(.wide).month().day().year())
-                .font(.headline)
+                .font(BaneFont.heading(15))
+                .foregroundStyle(palette.text)
 
             HStack(alignment: .top, spacing: 24) {
                 if let duration = WorkoutFormat.duration(workout.duration) {
@@ -113,10 +119,11 @@ struct WorkoutDetailView: View {
     private func metric(_ label: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(value)
-                .font(.title3.weight(.semibold))
+                .font(BaneFont.mono(17, weight: .semibold))
+                .foregroundStyle(palette.accent)
             Text(label)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(BaneFont.mono(10))
+                .foregroundStyle(palette.text3)
         }
     }
 }
@@ -128,19 +135,25 @@ struct WorkoutDetailView: View {
 private struct ExerciseDetailSection: View {
     let workoutExercise: WorkoutExercise
 
+    @Environment(\.banePalette) private var palette
+
     var body: some View {
         Section {
             if !workoutExercise.notes.isEmpty {
                 Text(workoutExercise.notes)
                     .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(palette.text2)
+                    .listRowBackground(palette.surface)
             }
 
             ForEach(workoutExercise.orderedSets) { set in
                 SetDetailRow(set: set)
             }
+            .listRowBackground(palette.surface)
         } header: {
             Text(workoutExercise.exercise?.name ?? "Exercise")
+                .baneHeading(13)
+                .foregroundStyle(palette.text2)
         }
     }
 }
@@ -152,27 +165,29 @@ private struct SetDetailRow: View {
 
     /// The unit the set's weight is shown in; storage stays pounds.
     @AppStorage(WeightPreferences.unitKey) private var weightUnit = WeightPreferences.fallback
+    @Environment(\.banePalette) private var palette
 
     var body: some View {
         HStack(spacing: 12) {
             Text(set.isWarmup ? "W" : "\(set.order + 1)")
-                .font(.subheadline.weight(.semibold).monospacedDigit())
+                .font(BaneFont.mono(13, weight: .semibold))
                 .frame(width: 26, height: 26)
                 .background(
-                    set.isWarmup ? Color.orange.opacity(0.2) : Color.secondary.opacity(0.15),
+                    set.isWarmup ? palette.amber.opacity(0.2) : palette.surface3,
                     in: Circle()
                 )
-                .foregroundStyle(set.isWarmup ? Color.orange : .secondary)
+                .foregroundStyle(set.isWarmup ? palette.amber : palette.text3)
                 .accessibilityLabel(set.isWarmup ? "Warm-up set" : "Set \(set.order + 1)")
 
             Text("\(set.reps) reps × \(WeightFormat.weight(set.weight, in: weightUnit))")
-                .font(.body.monospacedDigit())
+                .font(BaneFont.mono(15))
+                .foregroundStyle(palette.text)
 
             Spacer()
 
             if set.completed {
                 Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(Color.green)
+                    .foregroundStyle(palette.accent)
                     .accessibilityLabel("Completed")
             }
         }

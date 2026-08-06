@@ -10,6 +10,7 @@ import SwiftUI
 struct AddMeasurementView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.banePalette) private var palette
 
     @State private var date: Date = .now
     /// Raw text per field, keyed by ``MeasurementFieldSpec/label``.
@@ -42,6 +43,8 @@ struct AddMeasurementView: View {
                     .lineLimit(1...4)
             }
         }
+        .scrollContentBackground(.hidden)
+        .background(palette.bg)
         .navigationTitle("New Measurement")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {

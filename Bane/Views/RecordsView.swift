@@ -9,6 +9,7 @@ import SwiftUI
 /// workouts are logged. Read-only.
 struct RecordsView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.banePalette) private var palette
     @Query private var records: [PersonalRecord]
 
     var body: some View {
@@ -19,8 +20,12 @@ struct RecordsView: View {
                 } label: {
                     ExerciseRecordRow(group: group)
                 }
+                .listRowBackground(palette.surface)
             }
         }
+        .listRowSeparatorTint(palette.line)
+        .scrollContentBackground(.hidden)
+        .background(palette.bg)
         .navigationTitle("Records")
         .overlay {
             if groupedExercises.isEmpty {
@@ -70,15 +75,17 @@ private struct ExerciseRecordRow: View {
 
     /// The unit the 1RM headline is shown in; storage stays pounds.
     @AppStorage(WeightPreferences.unitKey) private var weightUnit = WeightPreferences.fallback
+    @Environment(\.banePalette) private var palette
 
     var body: some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
                 Text(group.exercise.name)
-                    .font(.body.weight(.medium))
+                    .font(BaneFont.heading(15))
+                    .foregroundStyle(palette.text)
                 Text("\(group.records.count) record\(group.records.count == 1 ? "" : "s")")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(BaneFont.mono(11))
+                    .foregroundStyle(palette.text3)
             }
 
             Spacer()
@@ -86,10 +93,11 @@ private struct ExerciseRecordRow: View {
             if let oneRepMax = group.estimatedOneRepMax {
                 VStack(alignment: .trailing, spacing: 2) {
                     Text(WeightFormat.weight(oneRepMax.value, in: weightUnit))
-                        .font(.headline.monospacedDigit())
+                        .font(BaneFont.mono(17, weight: .semibold))
+                        .foregroundStyle(palette.accent)
                     Text("est. 1RM")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .font(BaneFont.mono(10))
+                        .foregroundStyle(palette.text3)
                 }
             }
         }

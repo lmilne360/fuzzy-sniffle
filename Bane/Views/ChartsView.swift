@@ -13,6 +13,7 @@ import SwiftUI
 /// the store. The 1RM series is picked per exercise via a menu, defaulting to the
 /// first exercise that has any recorded history.
 struct ChartsView: View {
+    @Environment(\.banePalette) private var palette
     @Query(sort: \Workout.date) private var workouts: [Workout]
     @Query(sort: \BodyMeasurement.date) private var measurements: [BodyMeasurement]
     @Query(sort: \Exercise.name) private var exercises: [Exercise]
@@ -34,7 +35,7 @@ struct ChartsView: View {
             .padding()
         }
         .navigationTitle("Charts")
-        .background(Color(.systemGroupedBackground))
+        .background(palette.bg)
         .onAppear(perform: resolveDefaultExercise)
     }
 
@@ -79,7 +80,7 @@ struct ChartsView: View {
                         x: .value("Date", point.date, unit: .day),
                         y: .value("Volume", weightUnit.fromPounds(point.value))
                     )
-                    .foregroundStyle(Color.accentColor)
+                    .foregroundStyle(palette.accent)
                 }
                 .chartYAxisLabel("Volume (\(weightUnit.abbreviation))")
                 .frame(height: 220)
@@ -125,8 +126,8 @@ struct ChartsView: View {
 
     private func emptyState(_ message: String) -> some View {
         Text(message)
-            .font(.footnote)
-            .foregroundStyle(.secondary)
+            .font(BaneFont.body(13))
+            .foregroundStyle(palette.text3)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.vertical, 8)
     }
@@ -166,15 +167,22 @@ private struct ChartCard<Content: View>: View {
     let systemImage: String
     @ViewBuilder var content: Content
 
+    @Environment(\.banePalette) private var palette
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Label(title, systemImage: systemImage)
-                .font(.headline)
+                .baneHeading(13)
+                .foregroundStyle(palette.text)
             content
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding()
-        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12))
+        .background(palette.surface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(palette.line, lineWidth: 1)
+        )
     }
 }
 

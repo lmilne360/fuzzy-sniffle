@@ -16,6 +16,7 @@ import SwiftUI
 /// discoverable rather than hidden behind a swipe/long-press (ba-07l.13).
 struct RoutinesView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.banePalette) private var palette
     @Query(sort: \Routine.createdAt, order: .reverse) private var routines: [Routine]
 
     @State private var activeSheet: ActiveSheet?
@@ -44,18 +45,17 @@ struct RoutinesView: View {
                     // An explicit button style keeps this an independent tap
                     // target: without one the enclosing List row would treat
                     // the whole cell as a single button.
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-                    .tint(.green)
+                    .buttonStyle(.bane(.primary, size: .small))
                     .accessibilityHint("Starts a workout from this routine")
                 }
+                .listRowBackground(palette.surface)
                 .swipeActions(edge: .leading) {
                     Button {
                         start(routine)
                     } label: {
                         Label("Start", systemImage: "play.fill")
                     }
-                    .tint(.green)
+                    .tint(palette.accent)
                 }
                 .contextMenu {
                     Button {
@@ -72,6 +72,9 @@ struct RoutinesView: View {
             }
             .onDelete(perform: delete)
         }
+        .listRowSeparatorTint(palette.line)
+        .scrollContentBackground(.hidden)
+        .background(palette.bg)
         .navigationTitle("Plans")
         .overlay {
             if routines.isEmpty {
@@ -149,12 +152,16 @@ struct RoutinesView: View {
 private struct RoutineRow: View {
     let routine: Routine
 
+    @Environment(\.banePalette) private var palette
+
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(routine.name)
+                .font(BaneFont.heading(16))
+                .foregroundStyle(palette.text)
             Text(summary)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(BaneFont.mono(11))
+                .foregroundStyle(palette.text3)
         }
     }
 

@@ -7,6 +7,7 @@ import SwiftUI
 /// search field. The `+` toolbar button presents ``AddExerciseView`` for
 /// creating a user-defined exercise.
 struct ExercisesView: View {
+    @Environment(\.banePalette) private var palette
     @Query(sort: \Exercise.name) private var exercises: [Exercise]
     @State private var searchText = ""
     @State private var isPresentingAdd = false
@@ -21,10 +22,14 @@ struct ExercisesView: View {
                         } label: {
                             ExerciseRow(exercise: exercise)
                         }
+                        .listRowBackground(palette.surface)
                     }
                 }
             }
         }
+        .listRowSeparatorTint(palette.line)
+        .scrollContentBackground(.hidden)
+        .background(palette.bg)
         .navigationTitle("Lifts")
         .searchable(text: $searchText, prompt: "Search lifts")
         .overlay {
@@ -91,22 +96,21 @@ struct ExercisesView: View {
 private struct ExerciseRow: View {
     let exercise: Exercise
 
+    @Environment(\.banePalette) private var palette
+
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack {
                 Text(exercise.name)
+                    .font(BaneFont.body(15))
+                    .foregroundStyle(palette.text)
                 if exercise.isCustom {
-                    Text("Custom")
-                        .font(.caption2.weight(.semibold))
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Color.accentColor.opacity(0.15), in: Capsule())
-                        .foregroundStyle(Color.accentColor)
+                    BaneBadge(text: "Custom", kind: .accent)
                 }
             }
             Text("\(exercise.primaryMuscle.displayName) · \(exercise.equipment.displayName)")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(BaneFont.mono(11))
+                .foregroundStyle(palette.text3)
         }
     }
 }
