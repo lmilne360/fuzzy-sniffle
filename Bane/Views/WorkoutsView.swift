@@ -36,6 +36,7 @@ struct WorkoutsView: View {
                         }
                         .listRowBackground(palette.surface)
                     }
+                    .onDelete { offsets in delete(offsets, from: inProgress) }
                 } header: {
                     Text("In Progress").baneLabel().foregroundStyle(palette.text3)
                 }
@@ -51,6 +52,7 @@ struct WorkoutsView: View {
                         }
                         .listRowBackground(palette.surface)
                     }
+                    .onDelete { offsets in delete(offsets, from: finished) }
                 } header: {
                     Text("History").baneLabel().foregroundStyle(palette.text3)
                 }
@@ -131,6 +133,16 @@ struct WorkoutsView: View {
         let workout = Workout(startedAt: .now)
         modelContext.insert(workout)
         activeWorkout = workout
+    }
+
+    /// Deletes the swiped workouts (and their cascade of exercises/sets) from
+    /// `section` — the exact rows currently on screen, so the offsets line up
+    /// even though "In Progress" and "History" are filtered views over the
+    /// same query.
+    private func delete(_ offsets: IndexSet, from section: [Workout]) {
+        for index in offsets {
+            modelContext.delete(section[index])
+        }
     }
 }
 

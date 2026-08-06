@@ -177,6 +177,7 @@ struct ActiveWorkoutView: View {
 
     @State private var isPickingExercise = false
     @State private var isConfirmingDiscard = false
+    @State private var isReorderingExercises = false
     /// The exercise the user is choosing a swap replacement for, driving the
     /// alternatives picker sheet. `nil` when no swap is in progress.
     @State private var swappingExercise: WorkoutExercise?
@@ -230,7 +231,6 @@ struct ActiveWorkoutView: View {
                                 : nil
                         )
                     }
-                    .onMove(perform: moveExercises)
                 }
 
                 Section {
@@ -245,6 +245,7 @@ struct ActiveWorkoutView: View {
             }
             .listRowSeparatorTint(palette.line)
             .scrollContentBackground(.hidden)
+            .scrollDismissesKeyboard(.interactively)
             .background(palette.bg)
             .navigationTitle("Workout")
             .navigationBarTitleDisplayMode(.inline)
@@ -266,11 +267,13 @@ struct ActiveWorkoutView: View {
                 }
                 ToolbarItem(placement: .topBarLeading) {
                     if workout.exercises.count > 1 {
-                        EditButton()
+                        Button {
+                            isReorderingExercises = true
+                        } label: {
+                            Image(systemName: "arrow.up.arrow.down")
+                        }
+                        .accessibilityLabel("Reorder exercises")
                     }
-                }
-                ToolbarItem(placement: .principal) {
-                    WorkoutTimer(startedAt: workout.startedAt ?? workout.date)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Finish", action: finish)
@@ -299,6 +302,11 @@ struct ActiveWorkoutView: View {
                     onAdd: { warmups in addWarmupSets(warmups, to: workoutExercise) }
                 )
             }
+            .sheet(isPresented: $isReorderingExercises) {
+                NavigationStack {
+                    ReorderExercisesView(workout: workout, onMove: moveExercises)
+                }
+            }
             .confirmationDialog(
                 "Discard this workout?",
                 isPresented: $isConfirmingDiscard,
@@ -308,6 +316,9 @@ struct ActiveWorkoutView: View {
                 Button("Keep Logging", role: .cancel) {}
             } message: {
                 Text("This workout and all its logged sets will be deleted.")
+            }
+            .safeAreaInset(edge: .top) {
+                WorkoutProgressHeader(workout: workout)
             }
             .safeAreaInset(edge: .bottom) {
                 if restTimer.isRunning {
@@ -564,21 +575,51 @@ struct ActiveWorkoutView: View {
     }
 }
 
-// MARK: - Timer
+// MARK: - Progress header
 
-/// A monospaced, self-ticking elapsed-time readout for the running workout.
-private struct WorkoutTimer: View {
-    let startedAt: Date
+/// A pinned header showing the running elapsed time and a ``BaneProgressBar``
+/// tracking how many exercises are fully logged — replaces the old toolbar
+/// timer, which had no room to render its label alongside Discard/Reorder/
+/// Finish and so silently collapsed to an unlabeled, inert icon.
+private struct WorkoutProgressHeader: View {
+    @Bindable var workout: Workout
+
+    @Environment(\.banePalette) private var palette
 
     var body: some View {
-        TimelineView(.periodic(from: startedAt, by: 1)) { context in
-            Label(
-                Self.elapsed(from: startedAt, to: context.date),
-                systemImage: "stopwatch"
+        VStack(alignment: .leading, spacing: 10) {
+            TimelineView(.periodic(from: startedAt, by: 1)) { context in
+                Text(Self.elapsed(from: startedAt, to: context.date))
+                    .font(BaneFont.display(28))
+                    .foregroundStyle(palette.text)
+            }
+            BaneProgressBar(
+                progress: progress,
+                leadingLabel: "Progress",
+                trailingLabel: "\(completedExercises) of \(totalExercises) exercises"
             )
-            .font(.body.monospacedDigit())
-            .labelStyle(.titleAndIcon)
         }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(palette.surface)
+    }
+
+    private var startedAt: Date { workout.startedAt ?? workout.date }
+
+    private var totalExercises: Int { workout.exercises.count }
+
+    /// An exercise counts as done once every one of its logged sets — warm-up
+    /// or working — is checked complete. Exercises with no sets yet don't
+    /// count, so adding a fresh exercise can't inflate the fraction.
+    private var completedExercises: Int {
+        workout.orderedExercises.filter { exercise in
+            !exercise.sets.isEmpty && exercise.sets.allSatisfy(\.completed)
+        }.count
+    }
+
+    private var progress: Double {
+        guard totalExercises > 0 else { return 0 }
+        return Double(completedExercises) / Double(totalExercises)
     }
 
     /// Formats the interval as `M:SS` (or `H:MM:SS` past an hour).
@@ -591,6 +632,50 @@ private struct WorkoutTimer: View {
             return String(format: "%d:%02d:%02d", hours, minutes, seconds)
         }
         return String(format: "%d:%02d", minutes, seconds)
+    }
+}
+
+// MARK: - Reorder exercises
+
+/// A dedicated, always-in-edit-mode flat list for dragging exercises into a
+/// new order — deliberately separate from the main logging list.
+///
+/// Reordering used to be `.onMove` directly on the main list's `ForEach`, but
+/// each row there is a whole `Section` of heterogeneous, variably-sized
+/// content (notes field, N sets, two buttons). SwiftUI's List move-gesture
+/// geometry assumes a simple, uniform row shape; against that content it
+/// produced the wrong section, mis-attributed the drag to a child row (the
+/// notes field), or crashed outright. A plain list of exercise names is the
+/// uniform shape `.onMove` is built for, so it drives the same
+/// ``ActiveWorkoutView/moveExercises(from:to:)`` reliably.
+private struct ReorderExercisesView: View {
+    @Bindable var workout: Workout
+    let onMove: (IndexSet, Int) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.banePalette) private var palette
+
+    var body: some View {
+        List {
+            ForEach(workout.orderedExercises) { workoutExercise in
+                Text(workoutExercise.exercise?.name ?? "Exercise")
+                    .font(BaneFont.body(16))
+                    .foregroundStyle(palette.text)
+                    .listRowBackground(palette.surface)
+            }
+            .onMove(perform: onMove)
+        }
+        .listRowSeparatorTint(palette.line)
+        .scrollContentBackground(.hidden)
+        .background(palette.bg)
+        .environment(\.editMode, .constant(.active))
+        .navigationTitle("Reorder Exercises")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Done") { dismiss() }
+            }
+        }
     }
 }
 
@@ -802,11 +887,23 @@ private struct SetRow: View {
 
     @Environment(\.banePalette) private var palette
 
+    /// Which numeric field, if any, currently owns the keyboard. Cleared
+    /// explicitly on complete so checking a set off always closes the
+    /// keyboard, rather than leaving it open with a stale first responder.
+    private enum Field { case reps, weight }
+    @FocusState private var focusedField: Field?
+
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             fields
             if let previous {
                 previousLabel(previous)
+            }
+        }
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") { focusedField = nil }
             }
         }
     }
@@ -833,11 +930,13 @@ private struct SetRow: View {
             fieldColumn(title: "Reps") {
                 TextField("0", value: $set.reps, format: .number)
                     .keyboardType(.numberPad)
+                    .focused($focusedField, equals: .reps)
             }
 
             fieldColumn(title: "Weight (\(weightUnit.abbreviation))") {
                 TextField("0", value: $set.weight.weightDisplay(in: weightUnit), format: .number)
                     .keyboardType(.decimalPad)
+                    .focused($focusedField, equals: .weight)
             }
 
             rpeColumn
@@ -854,6 +953,7 @@ private struct SetRow: View {
             .accessibilityHint("Breaks this weight into plates per side")
 
             Button {
+                focusedField = nil
                 set.completed.toggle()
                 if set.completed { onComplete(set) }
             } label: {
