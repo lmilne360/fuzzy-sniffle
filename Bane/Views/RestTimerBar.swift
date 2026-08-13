@@ -67,6 +67,7 @@ struct RestTimerBar: View {
                 Label("30s", systemImage: "goforward.30")
                     .labelStyle(.titleAndIcon)
                     .font(.callout.weight(.medium))
+                    .fixedSize()
             }
             .buttonStyle(.bordered)
             .accessibilityLabel("Add 30 seconds")
