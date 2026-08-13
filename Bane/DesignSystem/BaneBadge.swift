@@ -27,7 +27,7 @@ struct BaneBadge: View {
         .frame(height: 24)
         .background(background)
         .overlay(
-            Capsule().strokeBorder(borderColor, lineWidth: 1)
+            RoundedRectangle(cornerRadius: 2, style: .continuous).strokeBorder(borderColor, lineWidth: 1)
         )
         .clipShape(RoundedRectangle(cornerRadius: 2, style: .continuous))
     }

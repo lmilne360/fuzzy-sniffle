@@ -55,10 +55,10 @@ struct BaneButtonStyle: ButtonStyle {
             .frame(height: size.height)
             .padding(.horizontal, size.horizontalPadding)
             .background(background(pressed: configuration.isPressed))
-            .foregroundStyle(foreground)
+            .foregroundStyle(foreground(pressed: configuration.isPressed))
             .overlay(
                 RoundedRectangle(cornerRadius: 4, style: .continuous)
-                    .strokeBorder(borderColor, lineWidth: kind == .secondary || kind == .danger ? 1 : 0)
+                    .strokeBorder(borderColor(pressed: configuration.isPressed), lineWidth: kind == .secondary || kind == .danger ? 1 : 0)
             )
             .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
             .opacity(isEnabled ? 1 : 0.38)
@@ -73,18 +73,18 @@ struct BaneButtonStyle: ButtonStyle {
         }
     }
 
-    private var foreground: Color {
+    private func foreground(pressed: Bool) -> Color {
         switch kind {
         case .primary: return palette.onAccent
-        case .secondary: return palette.text
+        case .secondary: return pressed ? palette.accent : palette.text
         case .ghost: return palette.text2
         case .danger: return palette.danger
         }
     }
 
-    private var borderColor: Color {
+    private func borderColor(pressed: Bool) -> Color {
         switch kind {
-        case .secondary: return palette.lineStrong
+        case .secondary: return pressed ? palette.accent : palette.lineStrong
         case .danger: return palette.danger.opacity(0.42)
         default: return .clear
         }

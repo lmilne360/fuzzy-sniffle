@@ -26,6 +26,7 @@ struct BaneNumberField: View {
                     .multilineTextAlignment(.center)
                     .focused($isFocused)
                     .font(BaneFont.heading(20))
+                    .monospacedDigit()
                     .foregroundStyle(palette.text)
                     .frame(maxWidth: .infinity)
 

@@ -30,10 +30,11 @@ struct BaneProgressBar: View {
             }
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
-                    Capsule().fill(palette.surface3)
-                    Capsule()
+                    RoundedRectangle(cornerRadius: 2, style: .continuous).fill(palette.surface3)
+                    RoundedRectangle(cornerRadius: 2, style: .continuous)
                         .fill(fillColor)
                         .frame(width: geo.size.width * max(0, min(1, progress)))
+                        .animation(.easeOut(duration: 0.3), value: progress)
                 }
             }
             .frame(height: 6)

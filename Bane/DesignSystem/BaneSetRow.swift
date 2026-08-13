@@ -18,12 +18,12 @@ struct BaneSetRow: View {
             Text("\(index)")
                 .font(BaneFont.mono(12, weight: .semibold))
                 .foregroundStyle(palette.text3)
-                .frame(width: 20)
+                .frame(width: 26)
 
             cell(k: "Reps", v: reps)
             cell(k: "Weight (\(weightUnit))", v: weight)
             cell(k: "RPE", v: rpe ?? "—")
-                .frame(width: 46)
+                .frame(width: 54)
 
             Button(action: onToggle) {
                 ZStack {
@@ -47,7 +47,12 @@ struct BaneSetRow: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
-        .background(done ? palette.accentWash.opacity(0.6) : palette.surface2)
+        .background(
+            ZStack {
+                palette.surface2
+                if done { palette.accentWash }
+            }
+        )
         .overlay(
             RoundedRectangle(cornerRadius: 4, style: .continuous)
                 .strokeBorder(done ? palette.accent.opacity(0.32) : palette.line, lineWidth: 1)

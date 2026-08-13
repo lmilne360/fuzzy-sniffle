@@ -97,7 +97,7 @@ struct RestTimerBar: View {
             Circle()
                 .stroke(Color.secondary.opacity(0.2), lineWidth: 4)
             Circle()
-                .trim(from: 0, to: controller.progress(at: now))
+                .trim(from: 0, to: 1 - controller.progress(at: now))
                 .stroke(
                     isDone ? Color.green : Color.accentColor,
                     style: StrokeStyle(lineWidth: 4, lineCap: .round)
