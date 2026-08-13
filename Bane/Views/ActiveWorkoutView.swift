@@ -401,6 +401,7 @@ struct ActiveWorkoutView: View {
         .task { RestNotifications.requestAuthorization() }
         .onAppear {
             now = Date()
+            refreshRestCompletionHandler()
             checkStaleness()
         }
         .onReceive(ticker) { date in
@@ -436,11 +437,31 @@ struct ActiveWorkoutView: View {
             workingDefault: defaultRestSeconds,
             warmupDefault: warmupRestSeconds
         )
-        restTimer.onComplete = { [weak workoutExercise] in
-            guard let workoutExercise else { return }
+        restTimer.start(seconds: seconds, exerciseName: workoutExercise.exercise?.name, exerciseID: workoutExercise.id)
+        refreshRestCompletionHandler()
+    }
+
+    /// (Re)binds `restTimer.onComplete` to *this* view instance.
+    ///
+    /// `RestTimerController` outlives any single `ActiveWorkoutView` (see
+    /// ``RestTimerRegistry``), so a closure captured once at `start(...)` time
+    /// would go stale if the view is minimized and a fresh instance takes its
+    /// place before the rest completes — writing to that stale instance's
+    /// `@FocusState` would silently do nothing. Re-deriving the closure from
+    /// `restTimer.exerciseID` against the current `self` whenever this view
+    /// (re)appears keeps it valid no matter which instance is showing when the
+    /// rest actually completes.
+    private func refreshRestCompletionHandler() {
+        guard let exerciseID = restTimer.exerciseID else {
+            restTimer.onComplete = nil
+            return
+        }
+        restTimer.onComplete = { [weak workout] in
+            guard let workout,
+                  let workoutExercise = workout.orderedExercises.first(where: { $0.id == exerciseID })
+            else { return }
             advanceFocus(after: workoutExercise)
         }
-        restTimer.start(seconds: seconds, exerciseName: workoutExercise.exercise?.name)
     }
 
     /// Moves keyboard focus to the next incomplete set of `workoutExercise`,
@@ -886,7 +907,7 @@ private struct ExerciseSection: View {
     let superset: SupersetContext?
     /// Which set's field owns the keyboard, hoisted to the workout level so a
     /// completed rest can move focus across rows (see ``SetFieldFocus``).
-    var focusedField: FocusState<SetFieldFocus?>.Binding
+    let focusedField: FocusState<SetFieldFocus?>.Binding
     let onAddSet: () -> Void
     /// Inserts a single blank warm-up set ahead of the working sets.
     let onAddWarmupSet: () -> Void

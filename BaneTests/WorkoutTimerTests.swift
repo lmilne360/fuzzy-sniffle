@@ -133,7 +133,7 @@ final class WorkoutTimerTests: XCTestCase {
 
     func testExtendBeyondZeroExtendsRemaining() {
         let controller = RestTimerController()
-        controller.start(seconds: 45, exerciseName: "Squat")
+        controller.start(seconds: 45, exerciseName: "Squat", exerciseID: nil)
 
         controller.extend(by: 30)
 
@@ -146,7 +146,7 @@ final class WorkoutTimerTests: XCTestCase {
     /// (test case 4 from the design spec).
     func testRepeatedNegativeExtendFloorsAtZeroAndCompletesOnce() {
         let controller = RestTimerController()
-        controller.start(seconds: 45, exerciseName: "Bench Press")
+        controller.start(seconds: 45, exerciseName: "Bench Press", exerciseID: nil)
 
         var completions = 0
         controller.onComplete = { completions += 1 }
@@ -166,7 +166,7 @@ final class WorkoutTimerTests: XCTestCase {
     /// than leaving the display at zero until the next `tick()`.
     func testExtendCrossingZeroSignalsImmediatelyWithoutWaitingForTick() {
         let controller = RestTimerController()
-        controller.start(seconds: 10, exerciseName: nil)
+        controller.start(seconds: 10, exerciseName: nil, exerciseID: nil)
 
         var completed = false
         controller.onComplete = { completed = true }
@@ -179,7 +179,7 @@ final class WorkoutTimerTests: XCTestCase {
     /// `tick()` after an already-signalled completion doesn't fire it again.
     func testTickAfterCompletionDoesNotDoubleSignal() {
         let controller = RestTimerController()
-        controller.start(seconds: 5, exerciseName: nil)
+        controller.start(seconds: 5, exerciseName: nil, exerciseID: nil)
 
         var completions = 0
         controller.onComplete = { completions += 1 }
@@ -195,7 +195,7 @@ final class WorkoutTimerTests: XCTestCase {
     /// leaves it visible awaiting dismissal.
     func testSkipCompletesThenStops() {
         let controller = RestTimerController()
-        controller.start(seconds: 60, exerciseName: "Deadlift")
+        controller.start(seconds: 60, exerciseName: "Deadlift", exerciseID: nil)
 
         var completed = false
         controller.onComplete = { completed = true }
@@ -212,7 +212,7 @@ final class WorkoutTimerTests: XCTestCase {
     /// it with exactly the remaining time it had.
     func testRestPauseAndResumePreservesRemaining() {
         let controller = RestTimerController()
-        controller.start(seconds: 90, exerciseName: "Row")
+        controller.start(seconds: 90, exerciseName: "Row", exerciseID: nil)
 
         let pauseAt = Date(timeIntervalSinceNow: 30)
         controller.pause(at: pauseAt)
@@ -229,7 +229,7 @@ final class WorkoutTimerTests: XCTestCase {
     /// Resuming a rest that had already hit zero before the pause is a no-op.
     func testResumeAfterRestAlreadyCompletedDoesNotRevive() {
         let controller = RestTimerController()
-        controller.start(seconds: 5, exerciseName: nil)
+        controller.start(seconds: 5, exerciseName: nil, exerciseID: nil)
 
         let pauseAt = Date(timeIntervalSinceNow: 10)
         controller.pause(at: pauseAt)

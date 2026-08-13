@@ -119,7 +119,7 @@ struct RestTimerBar: View {
 
 #Preview {
     let controller = RestTimerController()
-    controller.start(seconds: 90, exerciseName: "Bench Press")
+    controller.start(seconds: 90, exerciseName: "Bench Press", exerciseID: nil)
     return VStack {
         Spacer()
         RestTimerBar(controller: controller, now: Date())

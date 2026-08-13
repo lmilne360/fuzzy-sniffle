@@ -25,6 +25,18 @@ final class RestTimerController {
     /// Name of the exercise the current rest belongs to, for display. `nil`
     /// when idle.
     private(set) var exerciseName: String?
+    /// The `WorkoutExercise` the current rest belongs to, for advancing focus
+    /// on completion. `nil` when idle.
+    ///
+    /// Stored as data — rather than only baked into ``onComplete`` — because
+    /// this controller outlives any single `ActiveWorkoutView` instance (see
+    /// ``RestTimerRegistry``): a closure captured once at `start(...)` time
+    /// would go stale if the view is minimized and a fresh instance takes its
+    /// place before the rest completes. The owning view re-derives
+    /// `onComplete` from this id against its *current* self whenever it
+    /// reappears, instead of relying on a closure captured by a view instance
+    /// that may no longer exist.
+    private(set) var exerciseID: UUID?
     /// The full planned length of the current rest, in seconds — grows with
     /// each `extend(by:)` so progress stays proportional.
     private(set) var totalSeconds: Int = 0
@@ -49,10 +61,11 @@ final class RestTimerController {
     var onComplete: (() -> Void)?
 
     /// Begins a fresh rest of `seconds`, replacing any rest already running.
-    func start(seconds: Int, exerciseName: String?) {
+    func start(seconds: Int, exerciseName: String?, exerciseID: UUID?) {
         guard seconds > 0 else { return }
         totalSeconds = seconds
         self.exerciseName = exerciseName
+        self.exerciseID = exerciseID
         endsAt = Date(timeIntervalSinceNow: TimeInterval(seconds))
         hasSignalledCompletion = false
         pausedRemaining = nil
@@ -94,9 +107,11 @@ final class RestTimerController {
     func stop() {
         endsAt = nil
         exerciseName = nil
+        exerciseID = nil
         totalSeconds = 0
         hasSignalledCompletion = false
         pausedRemaining = nil
+        onComplete = nil
         RestNotifications.cancel()
     }
 
