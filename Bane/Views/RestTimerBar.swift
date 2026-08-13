@@ -20,17 +20,15 @@ enum RestDurations {
 /// The pinned rest-timer control shown along the bottom of the active workout
 /// while a rest is counting down.
 ///
-/// Ticks itself once a second to refresh the readout and to let the controller
-/// fire its completion haptic, and offers extend / skip actions. Once the
-/// countdown reaches zero it flips to a "Rest complete" state whose primary
-/// action dismisses the bar.
+/// Driven by `now`, which the owning `ActiveWorkoutView` advances on its one
+/// shared tick (also driving the session clock) — this view has no timer of
+/// its own. Offers extend / skip actions; once the countdown reaches zero it
+/// flips to a "Rest complete" state whose primary action dismisses the bar.
 struct RestTimerBar: View {
     /// Observed controller — reading its properties here tracks updates.
     let controller: RestTimerController
-
-    @State private var now = Date()
-
-    private let ticker = Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()
+    /// The shared tick's current time, supplied by the owning view.
+    let now: Date
 
     var body: some View {
         let remaining = controller.remaining(at: now)
@@ -54,6 +52,16 @@ struct RestTimerBar: View {
             Spacer(minLength: 8)
 
             Button {
+                controller.extend(by: -15)
+            } label: {
+                Image(systemName: "gobackward.15")
+                    .font(.callout.weight(.medium))
+            }
+            .buttonStyle(.bordered)
+            .accessibilityLabel("Subtract 15 seconds")
+            .disabled(isDone)
+
+            Button {
                 controller.extend(by: 30)
             } label: {
                 Label("30s", systemImage: "goforward.30")
@@ -64,7 +72,11 @@ struct RestTimerBar: View {
             .accessibilityLabel("Add 30 seconds")
 
             Button {
-                controller.stop()
+                if isDone {
+                    controller.stop()
+                } else {
+                    controller.skip()
+                }
             } label: {
                 Text(isDone ? "Done" : "Skip")
                     .font(.callout.weight(.semibold))
@@ -76,10 +88,6 @@ struct RestTimerBar: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .background(.bar)
-        .onReceive(ticker) { date in
-            now = date
-            controller.tick(date)
-        }
     }
 
     /// A circular progress ring wrapped around the remaining-time readout.
@@ -114,6 +122,6 @@ struct RestTimerBar: View {
     controller.start(seconds: 90, exerciseName: "Bench Press")
     return VStack {
         Spacer()
-        RestTimerBar(controller: controller)
+        RestTimerBar(controller: controller, now: Date())
     }
 }

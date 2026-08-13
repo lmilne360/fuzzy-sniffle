@@ -14,8 +14,11 @@ import UIKit
 /// skip/extend controls, and fires a haptic (foreground) plus a local
 /// notification (works while backgrounded/locked) when the interval elapses.
 ///
-/// One instance lives per `ActiveWorkoutView`; the app never runs two rests at
-/// once, so a single pending notification identifier is reused.
+/// Rest is tied to the workout session, not the view that started it — see
+/// ``RestTimerRegistry``, which keeps one instance alive per workout so
+/// minimizing and reopening `ActiveWorkoutView` doesn't tear a running rest
+/// down. The app never runs two rests at once, so a single pending
+/// notification identifier is reused.
 @MainActor
 @Observable
 final class RestTimerController {
@@ -25,15 +28,25 @@ final class RestTimerController {
     /// The full planned length of the current rest, in seconds — grows with
     /// each `extend(by:)` so progress stays proportional.
     private(set) var totalSeconds: Int = 0
-    /// Absolute time the rest is scheduled to end. `nil` while idle.
+    /// Absolute time the rest is scheduled to end. `nil` while idle or paused.
     private(set) var endsAt: Date?
 
     /// `true` while a rest is counting down (or sitting at zero awaiting
-    /// dismissal).
+    /// dismissal). `false` while paused — nothing is counting, so there's
+    /// nothing to show.
     var isRunning: Bool { endsAt != nil }
 
-    /// Guards the one-shot completion haptic so it fires exactly once per rest.
+    /// Guards the one-shot completion routine so it fires exactly once per rest,
+    /// however it's reached (natural expiry, `extend` crossing zero, or `skip`).
     private var hasSignalledCompletion = false
+
+    /// Remaining seconds captured at the moment of ``pause(at:)``; `nil` when
+    /// not paused. Restores the countdown on ``resume(at:)``.
+    private var pausedRemaining: Int?
+
+    /// Invoked once whenever a rest completes, by whichever path got it there.
+    /// `ActiveWorkoutView` uses this to advance keyboard focus to the next set.
+    var onComplete: (() -> Void)?
 
     /// Begins a fresh rest of `seconds`, replacing any rest already running.
     func start(seconds: Int, exerciseName: String?) {
@@ -42,27 +55,70 @@ final class RestTimerController {
         self.exerciseName = exerciseName
         endsAt = Date(timeIntervalSinceNow: TimeInterval(seconds))
         hasSignalledCompletion = false
+        pausedRemaining = nil
         RestNotifications.schedule(after: TimeInterval(seconds), exerciseName: exerciseName)
     }
 
-    /// Adds time to the running rest (also revives a rest that already hit zero).
+    /// Adds (or subtracts) time from the running rest. Also revives a rest
+    /// that already hit zero when `seconds` is positive.
+    ///
+    /// The new end is floored at "now" — a negative adjustment can never push
+    /// the countdown below zero — and crossing zero here runs the same
+    /// completion routine a natural expiry would, immediately, rather than
+    /// leaving the display sitting at zero until the next tick.
     func extend(by seconds: Int) {
-        guard endsAt != nil else { return }
-        let base = max(Date(), endsAt ?? Date())
-        let newEnd = base.addingTimeInterval(TimeInterval(seconds))
-        endsAt = newEnd
-        totalSeconds += seconds
-        hasSignalledCompletion = false
-        RestNotifications.schedule(after: newEnd.timeIntervalSinceNow, exerciseName: exerciseName)
+        guard let currentEnd = endsAt else { return }
+        let now = Date()
+        let flooredEnd = max(now, currentEnd.addingTimeInterval(TimeInterval(seconds)))
+        endsAt = flooredEnd
+        totalSeconds = max(0, totalSeconds + seconds)
+        if flooredEnd <= now {
+            signalCompletion()
+        } else {
+            hasSignalledCompletion = false
+            RestNotifications.schedule(after: flooredEnd.timeIntervalSinceNow, exerciseName: exerciseName)
+        }
     }
 
-    /// Ends the rest immediately, whether skipped early or dismissed at zero.
+    /// Skips the rest early: runs the completion routine (haptic, notification
+    /// cancel, focus advance) immediately, then dismisses the countdown.
+    func skip() {
+        guard endsAt != nil else { return }
+        signalCompletion()
+        stop()
+    }
+
+    /// Ends the rest immediately and silently — used to dismiss a completed
+    /// rest, or to cancel one outright (workout finished/discarded, or a set
+    /// un-completed) without running the completion routine.
     func stop() {
         endsAt = nil
         exerciseName = nil
         totalSeconds = 0
         hasSignalledCompletion = false
+        pausedRemaining = nil
         RestNotifications.cancel()
+    }
+
+    /// Freezes the countdown: the notification is cancelled and the remaining
+    /// time captured so ``resume(at:)`` can restore it exactly. No-op while idle.
+    func pause(at date: Date) {
+        guard endsAt != nil else { return }
+        pausedRemaining = remaining(at: date)
+        endsAt = nil
+        RestNotifications.cancel()
+    }
+
+    /// Restores a countdown frozen by ``pause(at:)``, resuming from exactly
+    /// where it left off. No-op if not paused, or if it had already reached
+    /// zero before the pause.
+    func resume(at date: Date) {
+        guard let pausedRemaining else { return }
+        self.pausedRemaining = nil
+        guard pausedRemaining > 0 else { return }
+        endsAt = date.addingTimeInterval(TimeInterval(pausedRemaining))
+        hasSignalledCompletion = false
+        RestNotifications.schedule(after: TimeInterval(pausedRemaining), exerciseName: exerciseName)
     }
 
     /// Seconds left at `date`, never negative.
@@ -78,13 +134,23 @@ final class RestTimerController {
         return min(1, max(0, done / Double(totalSeconds)))
     }
 
-    /// Called on each UI tick; fires the completion haptic once as the rest
-    /// reaches zero. The local notification is scheduled up front, so this only
-    /// handles the in-app foreground cue.
+    /// Called on each UI tick; runs the completion routine once as the rest
+    /// naturally reaches zero.
     func tick(_ date: Date) {
         guard endsAt != nil, !hasSignalledCompletion, remaining(at: date) == 0 else { return }
+        signalCompletion()
+    }
+
+    /// The single completion routine, run exactly once per rest regardless of
+    /// which path (natural expiry, `extend` crossing zero, `skip`) triggers it:
+    /// cancel the now-redundant notification, fire the haptic, and let the
+    /// view advance focus to the next set.
+    private func signalCompletion() {
+        guard !hasSignalledCompletion else { return }
         hasSignalledCompletion = true
+        RestNotifications.cancel()
         Self.playCompletionHaptic()
+        onComplete?()
     }
 
     private static func playCompletionHaptic() {
@@ -92,6 +158,33 @@ final class RestTimerController {
         let generator = UINotificationFeedbackGenerator()
         generator.notificationOccurred(.success)
         #endif
+    }
+}
+
+/// Keeps one ``RestTimerController`` alive per workout for the process's
+/// lifetime, so minimizing `ActiveWorkoutView` (which recreates its `@State`
+/// from scratch each time it's presented) doesn't tear down a running rest —
+/// rest is tied to the workout session, not the view.
+@MainActor
+final class RestTimerRegistry {
+    static let shared = RestTimerRegistry()
+
+    private var controllers: [UUID: RestTimerController] = [:]
+
+    private init() {}
+
+    /// The controller for `workoutID`, creating one on first access.
+    func controller(for workoutID: UUID) -> RestTimerController {
+        if let existing = controllers[workoutID] { return existing }
+        let controller = RestTimerController()
+        controllers[workoutID] = controller
+        return controller
+    }
+
+    /// Drops the controller once its workout is finished or discarded, so it
+    /// doesn't leak for the remaining life of the process.
+    func remove(_ workoutID: UUID) {
+        controllers.removeValue(forKey: workoutID)
     }
 }
 

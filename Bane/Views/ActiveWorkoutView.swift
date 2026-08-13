@@ -101,6 +101,39 @@ enum ExerciseSwap {
     }
 }
 
+/// Identifies which field of which set currently owns the keyboard.
+///
+/// Hoisted to `ActiveWorkoutView` rather than local to each `SetRow` so that
+/// completing a rest can move focus to a different set — possibly in another
+/// exercise's row entirely. A per-row `@FocusState` has no way to reach
+/// outside its own row; a shared one, passed down as a `FocusState.Binding`,
+/// does (ba-84b).
+struct SetFieldFocus: Hashable {
+    enum Field: Hashable { case reps, weight }
+    let setID: UUID
+    let field: Field
+}
+
+/// The "still working out?" staleness check for the active-workout session
+/// clock.
+///
+/// Extracted from the view so the rule is unit-testable without SwiftUI: a
+/// session left running for hours with no pause reads as forgotten, not
+/// genuinely ongoing — a paused session's owner has already shown they're
+/// tracking it, so it's excluded (ba-84b).
+enum StaleWorkoutCheck {
+    /// Sessions running longer than this without ever pausing prompt to confirm.
+    static let threshold: TimeInterval = 6 * 3600
+
+    /// `true` when `workout` has been running past ``threshold`` and has never
+    /// been paused.
+    static func isStale(_ workout: Workout, at now: Date) -> Bool {
+        guard let startedAt = workout.startedAt else { return false }
+        guard workout.pausedAt == nil, workout.pausedTotal == 0 else { return false }
+        return now.timeIntervalSince(startedAt) > threshold
+    }
+}
+
 /// Look-up of what the user did *last time* for an exercise, surfaced as ghost
 /// values beside each set while logging (Strong's signature "previous" column).
 ///
@@ -170,6 +203,7 @@ struct ActiveWorkoutView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @Environment(\.banePalette) private var palette
+    @Environment(\.scenePhase) private var scenePhase
 
     /// Newest first, so ``currentBodyWeight`` is the most recently recorded
     /// value.
@@ -193,8 +227,26 @@ struct ActiveWorkoutView: View {
     /// `swappingExercise` already does for the swap sheet, avoids that (ba-yy0).
     @State private var warmupTarget: WorkoutExercise?
 
-    /// Drives the between-sets rest countdown surfaced at the bottom of the view.
-    @State private var restTimer = RestTimerController()
+    /// Drives the between-sets rest countdown surfaced at the bottom of the
+    /// view. Looked up from ``RestTimerRegistry`` rather than created fresh so
+    /// a running rest survives minimizing and reopening this view.
+    @State private var restTimer: RestTimerController
+
+    /// The single tick driving both the session clock and the rest timer's
+    /// displayed remaining time — one timer, not two.
+    @State private var now = Date()
+
+    /// Which set's reps/weight field currently owns the keyboard, hoisted so
+    /// a completed rest can move focus into a different row (see
+    /// ``SetFieldFocus``).
+    @FocusState private var focusedField: SetFieldFocus?
+
+    /// Guards the "still working out?" prompt so it surfaces at most once per
+    /// session rather than every time the app returns to the foreground.
+    @State private var hasCheckedStaleness = false
+    @State private var isShowingStaleCheck = false
+
+    private let ticker = Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()
 
     @AppStorage(RestPreferences.defaultSecondsKey)
     private var defaultRestSeconds = RestPreferences.fallbackSeconds
@@ -202,6 +254,11 @@ struct ActiveWorkoutView: View {
     private var warmupRestSeconds = RestPreferences.fallbackWarmupSeconds
     @AppStorage(RestPreferences.autoStartKey)
     private var autoStartRest = true
+
+    init(workout: Workout) {
+        self._workout = Bindable(wrappedValue: workout)
+        self._restTimer = State(initialValue: RestTimerRegistry.shared.controller(for: workout.id))
+    }
 
     var body: some View {
         NavigationStack {
@@ -214,6 +271,7 @@ struct ActiveWorkoutView: View {
                             workoutExercise: workoutExercise,
                             defaultRestSeconds: defaultRestSeconds,
                             superset: superset(for: workoutExercise),
+                            focusedField: $focusedField,
                             onAddSet: { addSet(to: workoutExercise) },
                             onAddWarmupSet: { addWarmupSet(to: workoutExercise) },
                             onDeleteSets: { offsets in
@@ -222,6 +280,7 @@ struct ActiveWorkoutView: View {
                             onRemoveExercise: { remove(workoutExercise) },
                             onSwap: { swappingExercise = workoutExercise },
                             onComplete: { set in startRest(for: workoutExercise, set: set) },
+                            onUncomplete: { _ in restTimer.stop() },
                             onOpenWarmups: { warmupTarget = workoutExercise },
                             onSupersetWithNext: hasNextExercise(after: workoutExercise)
                                 ? { supersetWithNext(workoutExercise) }
@@ -317,12 +376,22 @@ struct ActiveWorkoutView: View {
             } message: {
                 Text("This workout and all its logged sets will be deleted.")
             }
+            .confirmationDialog(
+                "Still working out?",
+                isPresented: $isShowingStaleCheck,
+                titleVisibility: .visible
+            ) {
+                Button("End Workout", role: .destructive, action: endStaleWorkout)
+                Button("Keep Going", role: .cancel) {}
+            } message: {
+                Text("This session has been running for a while. End it at your last logged set, or keep going.")
+            }
             .safeAreaInset(edge: .top) {
-                WorkoutProgressHeader(workout: workout)
+                WorkoutProgressHeader(workout: workout, now: now, onTogglePause: togglePause)
             }
             .safeAreaInset(edge: .bottom) {
                 if restTimer.isRunning {
-                    RestTimerBar(controller: restTimer)
+                    RestTimerBar(controller: restTimer, now: now)
                         .transition(.move(edge: .bottom))
                 }
             }
@@ -330,7 +399,20 @@ struct ActiveWorkoutView: View {
         .interactiveDismissDisabled()
         .animation(.snappy, value: restTimer.isRunning)
         .task { RestNotifications.requestAuthorization() }
-        .onDisappear { restTimer.stop() }
+        .onAppear {
+            now = Date()
+            checkStaleness()
+        }
+        .onReceive(ticker) { date in
+            now = date
+            restTimer.tick(date)
+        }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active else { return }
+            now = Date()
+            restTimer.tick(now)
+            checkStaleness()
+        }
     }
 
     private var emptyState: some View {
@@ -354,7 +436,57 @@ struct ActiveWorkoutView: View {
             workingDefault: defaultRestSeconds,
             warmupDefault: warmupRestSeconds
         )
+        restTimer.onComplete = { [weak workoutExercise] in
+            guard let workoutExercise else { return }
+            advanceFocus(after: workoutExercise)
+        }
         restTimer.start(seconds: seconds, exerciseName: workoutExercise.exercise?.name)
+    }
+
+    /// Moves keyboard focus to the next incomplete set of `workoutExercise`,
+    /// or the next exercise's first set if this one is fully logged. Called
+    /// when a rest completes.
+    private func advanceFocus(after workoutExercise: WorkoutExercise) {
+        if let nextSet = workoutExercise.orderedSets.first(where: { !$0.completed }) {
+            focusedField = SetFieldFocus(setID: nextSet.id, field: .reps)
+            return
+        }
+        let ordered = workout.orderedExercises
+        guard let index = ordered.firstIndex(where: { $0.id == workoutExercise.id }),
+              index + 1 < ordered.count,
+              let nextFirstSet = ordered[index + 1].orderedSets.first else { return }
+        focusedField = SetFieldFocus(setID: nextFirstSet.id, field: .reps)
+    }
+
+    // MARK: - Session clock
+
+    /// Toggles the session pause/resume state, freezing (or restoring) both
+    /// the session clock and the rest timer at exactly the same instant.
+    private func togglePause() {
+        let date = Date()
+        if workout.isPaused {
+            workout.resume(at: date)
+            restTimer.resume(at: date)
+        } else {
+            workout.pause(at: date)
+            restTimer.pause(at: date)
+        }
+        now = date
+    }
+
+    /// Surfaces the "still working out?" prompt once per session when the
+    /// workout has run past ``StaleWorkoutCheck/threshold`` without a pause.
+    private func checkStaleness() {
+        guard !hasCheckedStaleness, StaleWorkoutCheck.isStale(workout, at: now) else { return }
+        hasCheckedStaleness = true
+        isShowingStaleCheck = true
+    }
+
+    /// Ends a stale session at its last logged set's timestamp (falling back
+    /// to when it started) rather than the moment the user happened to reopen
+    /// the app.
+    private func endStaleWorkout() {
+        complete(at: workout.lastLoggedSetTimestamp ?? workout.startedAt ?? .now)
     }
 
     // MARK: - Mutations
@@ -557,19 +689,29 @@ struct ActiveWorkoutView: View {
         }
     }
 
-    /// Completes the session: stamp the finish time so it moves to history, then
-    /// mirror it to Apple Health as a strength-training workout (best-effort).
-    private func finish() {
-        workout.finishedAt = .now
+    /// Completes the session at `finishedAt`: stamps the finish time so it
+    /// moves to history, mirrors it to Apple Health (best-effort), and drops
+    /// its rest-timer controller from the registry now that the session is over.
+    private func complete(at finishedAt: Date) {
+        workout.finishedAt = finishedAt
         #if canImport(HealthKit)
         let finished = workout
         Task { await HealthKitService.shared.save(finished) }
         #endif
+        RestTimerRegistry.shared.remove(workout.id)
         dismiss()
     }
 
-    /// Abandons the session, deleting the workout and its cascade of children.
+    /// Completes the session now — the ordinary "Finish" action.
+    private func finish() {
+        complete(at: .now)
+    }
+
+    /// Abandons the session, deleting the workout and its cascade of children,
+    /// and drops its rest-timer controller from the registry.
     private func discard() {
+        RestTimerRegistry.shared.remove(workout.id)
+        restTimer.stop()
         modelContext.delete(workout)
         dismiss()
     }
@@ -577,21 +719,32 @@ struct ActiveWorkoutView: View {
 
 // MARK: - Progress header
 
-/// A pinned header showing the running elapsed time and a ``BaneProgressBar``
-/// tracking how many exercises are fully logged — replaces the old toolbar
-/// timer, which had no room to render its label alongside Discard/Reorder/
-/// Finish and so silently collapsed to an unlabeled, inert icon.
+/// A pinned header showing the running elapsed time, a pause/resume control,
+/// and a ``BaneProgressBar`` tracking how many exercises are fully logged —
+/// replaces the old toolbar timer, which had no room to render its label
+/// alongside Discard/Reorder/Finish and so silently collapsed to an
+/// unlabeled, inert icon.
+///
+/// Driven entirely by `now`, supplied by the owning `ActiveWorkoutView`'s
+/// single shared tick — this view has no timer of its own, and the displayed
+/// value freezes exactly when `workout.isPaused` because ``Workout/elapsed(at:)``
+/// stops advancing at `pausedAt` regardless of how far `now` moves on.
 private struct WorkoutProgressHeader: View {
     @Bindable var workout: Workout
+    let now: Date
+    let onTogglePause: () -> Void
 
     @Environment(\.banePalette) private var palette
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            TimelineView(.periodic(from: startedAt, by: 1)) { context in
-                Text(Self.elapsed(from: startedAt, to: context.date))
-                    .font(BaneFont.display(28))
+            HStack(alignment: .firstTextBaseline) {
+                Text(Self.format(elapsed))
+                    .font(BaneFont.display(28).monospacedDigit())
                     .foregroundStyle(palette.text)
+                    .accessibilityLabel(Self.coarseAccessibilityLabel(elapsed))
+                Spacer()
+                pauseButton
             }
             BaneProgressBar(
                 progress: progress,
@@ -604,7 +757,16 @@ private struct WorkoutProgressHeader: View {
         .background(palette.surface)
     }
 
-    private var startedAt: Date { workout.startedAt ?? workout.date }
+    private var elapsed: TimeInterval { workout.elapsed(at: now) }
+
+    private var pauseButton: some View {
+        Button(action: onTogglePause) {
+            Image(systemName: workout.isPaused ? "play.fill" : "pause.fill")
+                .font(.body)
+                .foregroundStyle(palette.text2)
+        }
+        .accessibilityLabel(workout.isPaused ? "Resume workout" : "Pause workout")
+    }
 
     private var totalExercises: Int { workout.exercises.count }
 
@@ -623,8 +785,8 @@ private struct WorkoutProgressHeader: View {
     }
 
     /// Formats the interval as `M:SS` (or `H:MM:SS` past an hour).
-    static func elapsed(from start: Date, to now: Date) -> String {
-        let total = max(0, Int(now.timeIntervalSince(start)))
+    static func format(_ elapsed: TimeInterval) -> String {
+        let total = max(0, Int(elapsed))
         let hours = total / 3600
         let minutes = (total % 3600) / 60
         let seconds = total % 60
@@ -632,6 +794,19 @@ private struct WorkoutProgressHeader: View {
             return String(format: "%d:%02d:%02d", hours, minutes, seconds)
         }
         return String(format: "%d:%02d", minutes, seconds)
+    }
+
+    /// A minute-grained label for VoiceOver: the visible text updates every
+    /// second, but this value only changes once a minute, so it reads as a
+    /// live region without announcing every tick.
+    static func coarseAccessibilityLabel(_ elapsed: TimeInterval) -> String {
+        let totalMinutes = max(0, Int(elapsed)) / 60
+        let hours = totalMinutes / 60
+        let minutes = totalMinutes % 60
+        var parts: [String] = []
+        if hours > 0 { parts.append("\(hours) hour\(hours == 1 ? "" : "s")") }
+        parts.append("\(minutes) minute\(minutes == 1 ? "" : "s")")
+        return parts.joined(separator: " ") + " elapsed"
     }
 }
 
@@ -709,6 +884,9 @@ private struct ExerciseSection: View {
     let defaultRestSeconds: Int
     /// Superset placement for this exercise, or `nil` when it stands alone.
     let superset: SupersetContext?
+    /// Which set's field owns the keyboard, hoisted to the workout level so a
+    /// completed rest can move focus across rows (see ``SetFieldFocus``).
+    var focusedField: FocusState<SetFieldFocus?>.Binding
     let onAddSet: () -> Void
     /// Inserts a single blank warm-up set ahead of the working sets.
     let onAddWarmupSet: () -> Void
@@ -718,6 +896,8 @@ private struct ExerciseSection: View {
     let onSwap: () -> Void
     /// Fired with the set that was just checked complete.
     let onComplete: (SetEntry) -> Void
+    /// Fired with the set that was just un-completed.
+    let onUncomplete: (SetEntry) -> Void
     /// Opens the warm-up calculator sheet for this exercise.
     let onOpenWarmups: () -> Void
     /// Links this exercise with the one below into a superset. `nil` when there
@@ -740,8 +920,14 @@ private struct ExerciseSection: View {
             .listRowBackground(palette.surface)
 
             ForEach(workoutExercise.orderedSets) { set in
-                SetRow(set: set, previous: previousValues[set.id], onComplete: onComplete)
-                    .listRowBackground(palette.surface2)
+                SetRow(
+                    set: set,
+                    previous: previousValues[set.id],
+                    focusedField: focusedField,
+                    onComplete: onComplete,
+                    onUncomplete: onUncomplete
+                )
+                .listRowBackground(palette.surface2)
             }
             .onDelete(perform: onDeleteSets)
 
@@ -876,8 +1062,15 @@ private struct SetRow: View {
     /// What was performed for this set last session, or `nil` when there's no
     /// prior session to show. Drives the "last time" ghost line.
     let previous: PreviousSession.SetValue?
+    /// Which set's field owns the keyboard, hoisted to the workout level (see
+    /// ``SetFieldFocus``) rather than local to this row — a per-row
+    /// `@FocusState` has no way to receive focus moved in from outside it,
+    /// which a completed rest needs to do when it advances to the next set.
+    let focusedField: FocusState<SetFieldFocus?>.Binding
     /// Called with this set when it transitions into the completed state.
     let onComplete: (SetEntry) -> Void
+    /// Called with this set when it transitions out of the completed state.
+    let onUncomplete: (SetEntry) -> Void
 
     /// The unit weights are displayed and entered in; storage stays pounds.
     @AppStorage(WeightPreferences.unitKey) private var weightUnit = WeightPreferences.fallback
@@ -886,12 +1079,6 @@ private struct SetRow: View {
     @State private var isShowingPlateCalculator = false
 
     @Environment(\.banePalette) private var palette
-
-    /// Which numeric field, if any, currently owns the keyboard. Cleared
-    /// explicitly on complete so checking a set off always closes the
-    /// keyboard, rather than leaving it open with a stale first responder.
-    private enum Field { case reps, weight }
-    @FocusState private var focusedField: Field?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -903,7 +1090,7 @@ private struct SetRow: View {
         .toolbar {
             ToolbarItemGroup(placement: .keyboard) {
                 Spacer()
-                Button("Done") { focusedField = nil }
+                Button("Done") { focusedField.wrappedValue = nil }
             }
         }
     }
@@ -930,13 +1117,13 @@ private struct SetRow: View {
             fieldColumn(title: "Reps") {
                 TextField("0", value: $set.reps, format: .number)
                     .keyboardType(.numberPad)
-                    .focused($focusedField, equals: .reps)
+                    .focused(focusedField, equals: SetFieldFocus(setID: set.id, field: .reps))
             }
 
             fieldColumn(title: "Weight (\(weightUnit.abbreviation))") {
                 TextField("0", value: $set.weight.weightDisplay(in: weightUnit), format: .number)
                     .keyboardType(.decimalPad)
-                    .focused($focusedField, equals: .weight)
+                    .focused(focusedField, equals: SetFieldFocus(setID: set.id, field: .weight))
             }
 
             rpeColumn
@@ -953,9 +1140,15 @@ private struct SetRow: View {
             .accessibilityHint("Breaks this weight into plates per side")
 
             Button {
-                focusedField = nil
+                focusedField.wrappedValue = nil
                 set.completed.toggle()
-                if set.completed { onComplete(set) }
+                if set.completed {
+                    set.completedAt = Date()
+                    onComplete(set)
+                } else {
+                    set.completedAt = nil
+                    onUncomplete(set)
+                }
             } label: {
                 ZStack {
                     RoundedRectangle(cornerRadius: 2, style: .continuous)
