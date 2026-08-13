@@ -340,6 +340,10 @@ struct ActiveWorkoutView: View {
                         .tint(palette.accent)
                         .disabled(workout.exercises.isEmpty)
                 }
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") { focusedField = nil }
+                }
             }
             .sheet(isPresented: $isPickingExercise) {
                 NavigationStack {
@@ -1106,12 +1110,6 @@ private struct SetRow: View {
             fields
             if let previous {
                 previousLabel(previous)
-            }
-        }
-        .toolbar {
-            ToolbarItemGroup(placement: .keyboard) {
-                Spacer()
-                Button("Done") { focusedField.wrappedValue = nil }
             }
         }
     }
