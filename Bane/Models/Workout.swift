@@ -12,6 +12,12 @@ final class Workout {
     var date: Date = Date.now
     var startedAt: Date?
     var finishedAt: Date?
+    /// The instant the session was last paused; `nil` while running. Combined
+    /// with `pausedTotal` to derive elapsed time from timestamps rather than
+    /// an accumulating counter (ba-84b).
+    var pausedAt: Date?
+    /// Cumulative seconds spent paused so far, folded in whenever a pause ends.
+    var pausedTotal: TimeInterval = 0
 
     /// Owned children, ordered by `WorkoutExercise.order` (see ``orderedExercises``).
     ///
@@ -68,6 +74,42 @@ final class Workout {
 
     /// `true` once the session has been completed.
     var isFinished: Bool { finishedAt != nil }
+
+    /// `true` while the session clock and rest timer are frozen.
+    var isPaused: Bool { pausedAt != nil }
+
+    /// Elapsed session time at `now`, derived fresh from timestamps on every
+    /// call — never accumulated, so it can't drift or stall when ticks are
+    /// throttled in the background. Freezes at the paused instant once
+    /// ``isPaused``, regardless of how far `now` has moved on.
+    func elapsed(at now: Date) -> TimeInterval {
+        guard let startedAt else { return 0 }
+        let reference = pausedAt ?? now
+        return max(0, reference.timeIntervalSince(startedAt) - pausedTotal)
+    }
+
+    /// Freezes the session clock and rest timer. No-op if already paused.
+    func pause(at date: Date) {
+        guard pausedAt == nil else { return }
+        pausedAt = date
+    }
+
+    /// Unfreezes the session clock and rest timer, folding the pause's
+    /// duration into `pausedTotal` so elapsed time excludes it entirely. No-op
+    /// if not currently paused.
+    func resume(at date: Date) {
+        guard let pausedAt else { return }
+        pausedTotal += date.timeIntervalSince(pausedAt)
+        self.pausedAt = nil
+    }
+
+    /// The most recent timestamp among this workout's completed sets, or
+    /// `nil` if none are completed yet. Backs the "still working out?" prompt
+    /// so ending a stale session lands on when the user actually stopped
+    /// logging rather than the moment they happened to reopen the app.
+    var lastLoggedSetTimestamp: Date? {
+        exercises.flatMap(\.sets).compactMap(\.completedAt).max()
+    }
 }
 
 /// An exercise performed within a `Workout`, holding its ordered set entries.
@@ -143,6 +185,10 @@ final class SetEntry {
     /// Rate of Perceived Exertion for the set (typically 6–10 in 0.5 steps).
     /// Optional — defaults to `nil` so it stays migration-safe for existing sets.
     var rpe: Double?
+    /// When this set was last marked complete; `nil` while incomplete or never
+    /// completed. Feeds the "still working out?" stale-session prompt (see
+    /// ``Workout/lastLoggedSetTimestamp``).
+    var completedAt: Date?
     /// Inverse of ``WorkoutExercise/sets``.
     var workoutExercise: WorkoutExercise?
 
