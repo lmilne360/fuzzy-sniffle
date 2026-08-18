@@ -8,6 +8,9 @@ struct BaneCard<Content: View>: View {
     var meta: String?
     var accented: Bool = false
     var raised: Bool = false
+    /// Transparent background, still bordered (mirrors `.bn-card--outline`).
+    /// Takes precedence over `raised` if both are set, matching the spec's CSS cascade.
+    var outline: Bool = false
     @ViewBuilder var content: Content
 
     @Environment(\.banePalette) private var palette
@@ -38,7 +41,7 @@ struct BaneCard<Content: View>: View {
             content
                 .padding(18)
         }
-        .background(raised ? palette.surface2 : palette.surface)
+        .background(outline ? Color.clear : (raised ? palette.surface2 : palette.surface))
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 8, style: .continuous)

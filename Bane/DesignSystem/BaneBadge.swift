@@ -9,12 +9,18 @@ enum BaneBadgeKind {
 struct BaneBadge: View {
     var text: String
     var kind: BaneBadgeKind = .accent
+    /// Whether to show the leading status dot. Defaults to `nil`, which preserves
+    /// the historical behavior of showing a dot for every non-solid tone and
+    /// hiding it for `.solid` — pass `true`/`false` to set dot independent of tone.
+    var dot: Bool?
 
     @Environment(\.banePalette) private var palette
 
+    private var showDot: Bool { dot ?? (kind != .solid) }
+
     var body: some View {
         HStack(spacing: 6) {
-            if kind != .solid {
+            if showDot {
                 Circle().fill(foreground).frame(width: 5, height: 5)
             }
             Text(text)
