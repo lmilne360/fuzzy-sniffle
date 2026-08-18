@@ -12,6 +12,9 @@ struct WorkoutsView: View {
     @Environment(\.banePalette) private var palette
     @Query(sort: \Workout.date, order: .reverse) private var workouts: [Workout]
 
+    /// The unit the delete-recap volume is shown in; storage stays pounds.
+    @AppStorage(WeightPreferences.unitKey) private var weightUnit = WeightPreferences.fallback
+
     /// The workout currently presented full-screen for logging.
     @State private var activeWorkout: Workout?
 
@@ -23,6 +26,20 @@ struct WorkoutsView: View {
 
     /// Whether the iCloud-sync preferences sheet is showing.
     @State private var isShowingSyncSettings = false
+
+    /// A completed workout awaiting the delete-confirm dialog's answer.
+    @State private var workoutPendingDeleteConfirmation: Workout?
+
+    /// A completed workout whose delete has been confirmed but not yet
+    /// committed — hidden from history immediately, but only actually
+    /// removed from ``modelContext`` once ``undoTask`` runs out its grace
+    /// window without being cancelled by an undo tap.
+    @State private var deletedWorkout: Workout?
+    @State private var undoSecondsRemaining: Int?
+    @State private var undoTask: Task<Void, Never>?
+
+    /// How long an undo toast stays actionable before the delete commits.
+    private static let undoWindowSeconds = 5
 
     var body: some View {
         List {
@@ -51,8 +68,14 @@ struct WorkoutsView: View {
                             WorkoutRow(workout: workout)
                         }
                         .listRowBackground(palette.surface)
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                            Button(role: .destructive) {
+                                workoutPendingDeleteConfirmation = workout
+                            } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
+                        }
                     }
-                    .onDelete { offsets in delete(offsets, from: finished) }
                 } header: {
                     Text("History").baneLabel().foregroundStyle(palette.text3)
                 }
@@ -67,6 +90,29 @@ struct WorkoutsView: View {
                 emptyState
             }
         }
+        .overlay {
+            if let workout = workoutPendingDeleteConfirmation {
+                DeleteWorkoutDialog(
+                    workout: deleteSummary(for: workout),
+                    onCancel: { workoutPendingDeleteConfirmation = nil },
+                    onConfirm: { confirmDelete(workout) }
+                )
+            }
+        }
+        .animation(.snappy, value: workoutPendingDeleteConfirmation?.persistentModelID)
+        .safeAreaInset(edge: .bottom) {
+            if let deletedWorkout {
+                UndoToast(
+                    message: "\(deletedWorkout.displayName) deleted",
+                    seconds: undoSecondsRemaining,
+                    onAction: undoDelete
+                )
+                .padding(.horizontal, 16)
+                .padding(.bottom, 8)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .animation(.snappy, value: deletedWorkout?.persistentModelID)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button(action: startWorkout) {
@@ -113,8 +159,10 @@ struct WorkoutsView: View {
         workouts.filter { !$0.isFinished }
     }
 
+    /// Finished sessions, minus one currently hidden behind a pending delete
+    /// (confirmed but still inside its undo window — see ``deletedWorkout``).
     private var finished: [Workout] {
-        workouts.filter(\.isFinished)
+        workouts.filter { $0.isFinished && $0.persistentModelID != deletedWorkout?.persistentModelID }
     }
 
     private var emptyState: some View {
@@ -143,6 +191,64 @@ struct WorkoutsView: View {
         for index in offsets {
             modelContext.delete(section[index])
         }
+    }
+
+    /// Builds the recap shown in ``DeleteWorkoutDialog`` for a completed workout.
+    private func deleteSummary(for workout: Workout) -> DeleteWorkoutSummary {
+        DeleteWorkoutSummary(
+            name: workout.displayName,
+            date: workout.date.formatted(.dateTime.month().day().hour().minute()),
+            duration: WorkoutFormat.duration(workout.duration),
+            volume: WeightFormat.volume(workout.totalVolume, in: weightUnit),
+            sets: workout.workingSetCount
+        )
+    }
+
+    /// Answers the delete-confirm dialog: hides the workout from history
+    /// immediately and starts its undo grace window. Any earlier pending
+    /// delete is committed right away rather than left to finish its own
+    /// window, since only one undo toast is shown at a time.
+    private func confirmDelete(_ workout: Workout) {
+        workoutPendingDeleteConfirmation = nil
+        commitPendingDeleteIfNeeded()
+
+        deletedWorkout = workout
+        undoSecondsRemaining = Self.undoWindowSeconds
+        undoTask = Task { @MainActor in
+            var remaining = Self.undoWindowSeconds
+            while remaining > 0 {
+                do {
+                    try await Task.sleep(for: .seconds(1))
+                } catch {
+                    return
+                }
+                remaining -= 1
+                undoSecondsRemaining = remaining
+            }
+            modelContext.delete(workout)
+            deletedWorkout = nil
+            undoSecondsRemaining = nil
+            undoTask = nil
+        }
+    }
+
+    /// Cancels the pending delete's grace window, restoring the workout to
+    /// history without ever having removed it from ``modelContext``.
+    private func undoDelete() {
+        undoTask?.cancel()
+        undoTask = nil
+        deletedWorkout = nil
+        undoSecondsRemaining = nil
+    }
+
+    /// Commits any delete still inside its undo window, ahead of schedule.
+    private func commitPendingDeleteIfNeeded() {
+        guard let deletedWorkout else { return }
+        undoTask?.cancel()
+        undoTask = nil
+        modelContext.delete(deletedWorkout)
+        self.deletedWorkout = nil
+        undoSecondsRemaining = nil
     }
 }
 
