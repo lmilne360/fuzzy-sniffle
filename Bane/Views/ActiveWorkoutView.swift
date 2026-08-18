@@ -188,6 +188,40 @@ enum PreviousSession {
     }
 }
 
+/// The set to move to once a rest completes or is being previewed: the
+/// resting exercise's own next incomplete set, or the next exercise's first
+/// set once this one is fully logged.
+///
+/// Extracted from the view so this traversal — shared by rest-completion
+/// focus-advance and the rest sheet's "next up" preview — is unit-testable
+/// against SwiftData models and can't drift between the two call sites.
+enum NextSet {
+    struct Match {
+        let workoutExercise: WorkoutExercise
+        let set: SetEntry
+        /// This set's 1-based position within `workoutExercise`'s sets.
+        let position: Int
+        /// Total sets in `workoutExercise`, for a "position of total" display.
+        let total: Int
+    }
+
+    /// The next set to work on after `workoutExercise`, within `workout`'s
+    /// exercise order. `nil` when `workoutExercise` is the workout's last
+    /// exercise and it's fully logged.
+    static func find(after workoutExercise: WorkoutExercise, in workout: Workout) -> Match? {
+        let ordered = workoutExercise.orderedSets
+        if let index = ordered.firstIndex(where: { !$0.completed }) {
+            return Match(workoutExercise: workoutExercise, set: ordered[index], position: index + 1, total: ordered.count)
+        }
+        let exercises = workout.orderedExercises
+        guard let exerciseIndex = exercises.firstIndex(where: { $0.id == workoutExercise.id }),
+              exerciseIndex + 1 < exercises.count else { return nil }
+        let nextExercise = exercises[exerciseIndex + 1]
+        guard let firstSet = nextExercise.orderedSets.first else { return nil }
+        return Match(workoutExercise: nextExercise, set: firstSet, position: 1, total: nextExercise.orderedSets.count)
+    }
+}
+
 /// The active workout-logging surface: the core loop of the app.
 ///
 /// Drives a single in-progress `Workout` — add exercises from the library, log
@@ -231,6 +265,12 @@ struct ActiveWorkoutView: View {
     /// view. Looked up from ``RestTimerRegistry`` rather than created fresh so
     /// a running rest survives minimizing and reopening this view.
     @State private var restTimer: RestTimerController
+
+    /// `true` once the rest UI has been minimized to ``RestTimerMinimizedBar``
+    /// (scrim tap, grabber tap, or swipe-down on ``RestTimerSheet``); `false`
+    /// shows the full sheet. Presentation-layer only — `restTimer` itself is
+    /// untouched by this toggle, so a rest keeps counting down either way.
+    @State private var isRestSheetMinimized = false
 
     /// The single tick driving both the session clock and the rest timer's
     /// displayed remaining time — one timer, not two.
@@ -380,14 +420,31 @@ struct ActiveWorkoutView: View {
                 WorkoutProgressHeader(workout: workout, now: now, restTimer: restTimer, onTogglePause: togglePause)
             }
             .safeAreaInset(edge: .bottom) {
-                if restTimer.isRunning {
-                    RestTimerBar(controller: restTimer, now: now)
-                        .transition(.move(edge: .bottom))
+                if restTimer.isRunning && isRestSheetMinimized {
+                    RestTimerMinimizedBar(controller: restTimer, now: now) {
+                        isRestSheetMinimized = false
+                    }
+                    .transition(.move(edge: .bottom))
                 }
             }
         }
         .interactiveDismissDisabled()
+        .overlay {
+            if restTimer.isRunning && !isRestSheetMinimized {
+                let preview = restNextSetPreview()
+                RestTimerSheet(
+                    controller: restTimer,
+                    now: now,
+                    nextExercise: preview?.workoutExercise.exercise?.name,
+                    nextSet: preview?.position,
+                    nextSetTotal: preview?.total,
+                    onMinimize: { isRestSheetMinimized = true }
+                )
+                .transition(.opacity)
+            }
+        }
         .animation(.snappy, value: restTimer.isRunning)
+        .animation(.snappy, value: isRestSheetMinimized)
         .task { RestNotifications.requestAuthorization() }
         .onAppear {
             now = Date()
@@ -452,7 +509,18 @@ struct ActiveWorkoutView: View {
             warmupDefault: warmupRestSeconds
         )
         restTimer.start(seconds: seconds, exerciseName: workoutExercise.exercise?.name, exerciseID: workoutExercise.id)
+        isRestSheetMinimized = false
         refreshRestCompletionHandler()
+    }
+
+    /// The next set to preview on ``RestTimerSheet`` while `restTimer` is
+    /// running, derived from the exercise its current rest belongs to. `nil`
+    /// once idle or when the rest's exercise was the workout's last one.
+    private func restNextSetPreview() -> NextSet.Match? {
+        guard let exerciseID = restTimer.exerciseID,
+              let workoutExercise = workout.orderedExercises.first(where: { $0.id == exerciseID })
+        else { return nil }
+        return NextSet.find(after: workoutExercise, in: workout)
     }
 
     /// (Re)binds `restTimer.onComplete` to *this* view instance.
@@ -482,15 +550,8 @@ struct ActiveWorkoutView: View {
     /// or the next exercise's first set if this one is fully logged. Called
     /// when a rest completes.
     private func advanceFocus(after workoutExercise: WorkoutExercise) {
-        if let nextSet = workoutExercise.orderedSets.first(where: { !$0.completed }) {
-            focusedField = SetFieldFocus(setID: nextSet.id, field: .reps)
-            return
-        }
-        let ordered = workout.orderedExercises
-        guard let index = ordered.firstIndex(where: { $0.id == workoutExercise.id }),
-              index + 1 < ordered.count,
-              let nextFirstSet = ordered[index + 1].orderedSets.first else { return }
-        focusedField = SetFieldFocus(setID: nextFirstSet.id, field: .reps)
+        guard let next = NextSet.find(after: workoutExercise, in: workout) else { return }
+        focusedField = SetFieldFocus(setID: next.set.id, field: .reps)
     }
 
     // MARK: - Session clock
