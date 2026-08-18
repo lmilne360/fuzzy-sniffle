@@ -306,7 +306,6 @@ struct ActiveWorkoutView: View {
             .scrollContentBackground(.hidden)
             .scrollDismissesKeyboard(.interactively)
             .background(palette.bg)
-            .navigationTitle("Workout")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -318,21 +317,8 @@ struct ActiveWorkoutView: View {
                     .accessibilityLabel("Minimize workout")
                     .accessibilityHint("Returns to the app while keeping this workout in progress")
                 }
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Discard", role: .destructive) {
-                        isConfirmingDiscard = true
-                    }
-                    .tint(palette.danger)
-                }
-                ToolbarItem(placement: .topBarLeading) {
-                    if workout.exercises.count > 1 {
-                        Button {
-                            isReorderingExercises = true
-                        } label: {
-                            Image(systemName: "arrow.up.arrow.down")
-                        }
-                        .accessibilityLabel("Reorder exercises")
-                    }
+                ToolbarItem(placement: .topBarTrailing) {
+                    workoutActionMenu
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Finish", action: finish)
@@ -391,7 +377,7 @@ struct ActiveWorkoutView: View {
                 Text("This session has been running for a while. End it at your last logged set, or keep going.")
             }
             .safeAreaInset(edge: .top) {
-                WorkoutProgressHeader(workout: workout, now: now, onTogglePause: togglePause)
+                WorkoutProgressHeader(workout: workout, now: now, restTimer: restTimer, onTogglePause: togglePause)
             }
             .safeAreaInset(edge: .bottom) {
                 if restTimer.isRunning {
@@ -426,6 +412,30 @@ struct ActiveWorkoutView: View {
             systemImage: "dumbbell",
             description: Text("Tap Add Exercise to start logging sets.")
         )
+    }
+
+    /// The nav row's single overflow menu — consolidates what used to be two
+    /// separate icon buttons (Reorder, Discard) crowding the header next to
+    /// Finish, mirroring the per-exercise ``ExerciseSection/actionMenu``.
+    private var workoutActionMenu: some View {
+        Menu {
+            if workout.exercises.count > 1 {
+                Button {
+                    isReorderingExercises = true
+                } label: {
+                    Label("Reorder Exercises", systemImage: "arrow.up.arrow.down")
+                }
+            }
+            Divider()
+            Button(role: .destructive) {
+                isConfirmingDiscard = true
+            } label: {
+                Label("Discard Workout", systemImage: "trash")
+            }
+        } label: {
+            Image(systemName: "ellipsis.circle")
+        }
+        .accessibilityLabel("Workout actions")
     }
 
     // MARK: - Rest timer
@@ -745,10 +755,11 @@ struct ActiveWorkoutView: View {
 // MARK: - Progress header
 
 /// A pinned header showing the running elapsed time, a pause/resume control,
-/// and a ``BaneProgressBar`` tracking how many exercises are fully logged —
-/// replaces the old toolbar timer, which had no room to render its label
-/// alongside Discard/Reorder/Finish and so silently collapsed to an
-/// unlabeled, inert icon.
+/// a one-line status caption, and a per-exercise-segmented hairline — replaces
+/// the old toolbar timer (which had no room to render its label alongside
+/// Discard/Reorder/Finish and so silently collapsed to an unlabeled, inert
+/// icon) and the separately-labeled exercise progress bar that used to sit
+/// beneath it.
 ///
 /// Driven entirely by `now`, supplied by the owning `ActiveWorkoutView`'s
 /// single shared tick — this view has no timer of its own, and the displayed
@@ -757,12 +768,16 @@ struct ActiveWorkoutView: View {
 private struct WorkoutProgressHeader: View {
     @Bindable var workout: Workout
     let now: Date
+    /// Read (not owned) to surface the "Resting …" caption state — the same
+    /// controller ``RestTimerBar`` drives from `ActiveWorkoutView`.
+    let restTimer: RestTimerController
     let onTogglePause: () -> Void
 
     @Environment(\.banePalette) private var palette
+    @AppStorage(WeightPreferences.unitKey) private var weightUnit = WeightPreferences.fallback
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline) {
                 Text(Self.format(elapsed))
                     .font(BaneFont.display(28).monospacedDigit())
@@ -771,14 +786,12 @@ private struct WorkoutProgressHeader: View {
                 Spacer()
                 pauseButton
             }
-            BaneProgressBar(
-                progress: progress,
-                leadingLabel: "Progress",
-                trailingLabel: "\(completedExercises) of \(totalExercises) exercises"
-            )
+            caption
+            hairline
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .padding(.top, 12)
+        .padding(.bottom, 10)
         .background(palette.surface)
     }
 
@@ -793,20 +806,110 @@ private struct WorkoutProgressHeader: View {
         .accessibilityLabel(workout.isPaused ? "Resume workout" : "Pause workout")
     }
 
-    private var totalExercises: Int { workout.exercises.count }
+    // MARK: Caption
 
-    /// An exercise counts as done once every one of its logged sets — warm-up
-    /// or working — is checked complete. Exercises with no sets yet don't
-    /// count, so adding a fresh exercise can't inflate the fraction.
-    private var completedExercises: Int {
-        workout.orderedExercises.filter { exercise in
-            !exercise.sets.isEmpty && exercise.sets.allSatisfy(\.completed)
-        }.count
+    /// One line of status — state (workout name / paused / resting) plus
+    /// exercise, set, and volume tallies — mirroring the design system's
+    /// `bn-wbar__caption` (mono, uppercase, tracked; bold figures a shade
+    /// lighter than the rest of the line).
+    private var caption: some View {
+        var line = stateOrNameText
+        if totalExercises > 0 {
+            line = line
+                + plain(" · Ex ")
+                + bold("\(min(currentExerciseIndex + 1, totalExercises))")
+                + plain("/\(totalExercises)")
+        }
+        if totalWorkingSets > 0 {
+            line = line
+                + plain(" · ")
+                + bold("\(completedWorkingSets)")
+                + plain("/\(totalWorkingSets) sets")
+        }
+        if workout.totalVolume > 0 {
+            line = line + plain(" · ") + bold(WeightFormat.volume(workout.totalVolume, in: weightUnit))
+        }
+        return line
+            .baneLabel()
+            .foregroundStyle(palette.text3)
+            .lineLimit(1)
+            .truncationMode(.tail)
     }
 
-    private var progress: Double {
-        guard totalExercises > 0 else { return 0 }
-        return Double(completedExercises) / Double(totalExercises)
+    /// The caption's leading segment: the workout's derived name normally,
+    /// or the paused/resting state when one is active — matching the design
+    /// system's mutually-exclusive `state` vs. `name` display.
+    private var stateOrNameText: Text {
+        if workout.isPaused {
+            return Text("Paused").foregroundStyle(palette.amber)
+        }
+        if restTimer.isRunning {
+            let remaining = TimeInterval(restTimer.remaining(at: now))
+            return Text("Resting \(Self.format(remaining))").foregroundStyle(palette.accent)
+        }
+        return Text(workout.displayName)
+    }
+
+    private func plain(_ string: String) -> Text { Text(string) }
+
+    private func bold(_ string: String) -> Text {
+        Text(string).fontWeight(.semibold).foregroundStyle(palette.text2)
+    }
+
+    private var totalExercises: Int { workout.exercises.count }
+    private var totalWorkingSets: Int { workout.workingSetCount }
+
+    private var completedWorkingSets: Int {
+        workout.exercises.reduce(0) { count, exercise in
+            count + exercise.sets.lazy.filter { !$0.isWarmup && $0.completed }.count
+        }
+    }
+
+    /// Index of the first exercise not yet fully logged (or `totalExercises`
+    /// once every exercise is done) — backs both the caption's "Ex N/total"
+    /// and the hairline's done/current/remaining split.
+    private var currentExerciseIndex: Int {
+        let ordered = workout.orderedExercises
+        return ordered.firstIndex(where: { !isFullyLogged($0) }) ?? ordered.count
+    }
+
+    /// An exercise counts as fully logged once every one of its sets — warm-up
+    /// or working — is checked complete. Exercises with no sets yet don't
+    /// count, so adding a fresh exercise can't inflate the fraction.
+    private func isFullyLogged(_ exercise: WorkoutExercise) -> Bool {
+        !exercise.sets.isEmpty && exercise.sets.allSatisfy(\.completed)
+    }
+
+    // MARK: Hairline
+
+    /// Per-exercise progress rule: completed exercises paint solid
+    /// ``BanePalette/accent``, the current one shows accent at 40%, everything
+    /// after is the muted track color — segment widths weight by each
+    /// exercise's set count so a 5-set exercise reads as more of the session
+    /// than a 2-set one.
+    private var hairline: some View {
+        let ordered = workout.orderedExercises
+        let weights = ordered.map { max(1, $0.sets.count) }
+        let totalWeight = max(1, weights.reduce(0, +))
+        let spacing: CGFloat = 2
+
+        return GeometryReader { geo in
+            let available = max(0, geo.size.width - spacing * CGFloat(max(0, ordered.count - 1)))
+            HStack(spacing: spacing) {
+                ForEach(Array(ordered.enumerated()), id: \.element.id) { index, _ in
+                    RoundedRectangle(cornerRadius: 1)
+                        .fill(hairlineColor(index: index))
+                        .frame(width: available * (Double(weights[index]) / Double(totalWeight)))
+                }
+            }
+        }
+        .frame(height: 2)
+    }
+
+    private func hairlineColor(index: Int) -> Color {
+        if index < currentExerciseIndex { return palette.accent }
+        if index == currentExerciseIndex { return palette.accent.opacity(0.4) }
+        return palette.surface3
     }
 
     /// Formats the interval as `M:SS` (or `H:MM:SS` past an hour).
