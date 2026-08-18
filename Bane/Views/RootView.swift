@@ -3,6 +3,13 @@ import SwiftUI
 
 /// Root shell of the app: a `TabView` hosting the top-level sections, each
 /// wrapped in its own `NavigationStack` so navigation state is scoped per tab.
+///
+/// Matches the design system's 5-slot `TabBar` (Train/Lifts/Plans/Records/More):
+/// the app has more sections than that leaves room for, so everything past the
+/// four primary ones (Charts, Muscles, Calendar, Achievements, Body, Settings)
+/// lives one tap deeper behind ``MoreView``, the design system's intended
+/// "More" slot (`dots` glyph) — rather than either cramming a 9-wide bar or
+/// hand-rolling a custom non-native tab bar to force a literal 5-button row.
 struct RootView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.banePalette) private var palette
@@ -58,45 +65,14 @@ struct RootView: View {
             }
 
             NavigationStack {
-                ChartsView()
+                MoreView()
             }
             .tabItem {
-                Label("Charts", systemImage: "chart.xyaxis.line")
-            }
-
-            NavigationStack {
-                MuscleHeatMapView()
-            }
-            .tabItem {
-                Label("Muscles", systemImage: "flame")
-            }
-
-            NavigationStack {
-                CalendarView()
-            }
-            .tabItem {
-                Label("Calendar", systemImage: "calendar")
-            }
-
-            NavigationStack {
-                AchievementsView()
-            }
-            .tabItem {
-                Label("Achievements", systemImage: "rosette")
-            }
-
-            NavigationStack {
-                MeasurementsView()
-            }
-            .tabItem {
-                Label("Body", systemImage: "ruler")
-            }
-
-            NavigationStack {
-                SettingsView()
-            }
-            .tabItem {
-                Label("Settings", systemImage: "gearshape")
+                Label {
+                    Text("More")
+                } icon: {
+                    BaneTabGlyph(kind: .dots)
+                }
             }
         }
         .toolbarBackground(palette.surface, for: .tabBar)
