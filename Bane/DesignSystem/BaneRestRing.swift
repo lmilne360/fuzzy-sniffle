@@ -3,21 +3,33 @@ import SwiftUI
 /// Circular rest countdown dial matching `.bn-ring`: a track ring, an accent
 /// arc that sweeps down as time elapses, and a centered mm:ss readout.
 ///
-/// Not yet wired into the live rest-timer bar — `RestTimerBar`/
-/// `RestTimerController` have in-flight work on the same surface (ba-b4n).
-/// This is the design-system counterpart ready for that integration once it
-/// lands.
+/// Wired into the live rest timer via `RestTimerSheet` — `tone` drives the
+/// spec's amber/venom arc color for the "almost done" urgent state.
 struct BaneRestRing: View {
+    /// Ring arc color — amber signals the final seconds, matching `.bn-ring`'s
+    /// `tone` prop in the design system.
+    enum Tone {
+        case venom, amber
+    }
+
     var remaining: Int
     var total: Int
     var label: String = "Rest"
     var size: CGFloat = 168
+    var tone: Tone = .venom
 
     @Environment(\.banePalette) private var palette
 
     private var progress: Double {
         guard total > 0 else { return 0 }
         return max(0, min(1, Double(remaining) / Double(total)))
+    }
+
+    private var ringColor: Color {
+        switch tone {
+        case .venom: return palette.accent
+        case .amber: return palette.amber
+        }
     }
 
     private var timeText: String {
@@ -32,7 +44,7 @@ struct BaneRestRing: View {
                 .stroke(palette.surface3, lineWidth: 7)
             Circle()
                 .trim(from: 0, to: progress)
-                .stroke(palette.accent, style: StrokeStyle(lineWidth: 7, lineCap: .butt))
+                .stroke(ringColor, style: StrokeStyle(lineWidth: 7, lineCap: .butt))
                 .rotationEffect(.degrees(-90))
 
             VStack(spacing: 6) {
