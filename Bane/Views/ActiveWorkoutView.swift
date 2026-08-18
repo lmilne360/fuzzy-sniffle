@@ -1272,6 +1272,13 @@ private struct SetRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             fields
+                .padding(.vertical, 6)
+                .background(set.completed ? palette.accentWash : .clear)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .strokeBorder(set.completed ? palette.accent.opacity(0.32) : .clear, lineWidth: 1)
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
             if let previous {
                 previousLabel(previous)
             }
@@ -1297,13 +1304,21 @@ private struct SetRow: View {
             .accessibilityLabel(set.isWarmup ? "Warm-up set" : "Working set \(set.order + 1)")
             .accessibilityHint("Toggles warm-up")
 
-            fieldColumn(title: "Reps") {
+            fieldColumn(
+                title: "Reps",
+                onDecrement: { set.reps = max(0, set.reps - 1) },
+                onIncrement: { set.reps += 1 }
+            ) {
                 TextField("0", value: $set.reps, format: .number)
                     .keyboardType(.numberPad)
                     .focused(focusedField, equals: SetFieldFocus(setID: set.id, field: .reps))
             }
 
-            fieldColumn(title: "Weight (\(weightUnit.abbreviation))") {
+            fieldColumn(
+                title: "Weight (\(weightUnit.abbreviation))",
+                onDecrement: { set.weight = max(0, set.weight - weightUnit.toPounds(1)) },
+                onIncrement: { set.weight += weightUnit.toPounds(1) }
+            ) {
                 TextField("0", value: $set.weight.weightDisplay(in: weightUnit), format: .number)
                     .keyboardType(.decimalPad)
                     .focused(focusedField, equals: SetFieldFocus(setID: set.id, field: .weight))
@@ -1366,23 +1381,47 @@ private struct SetRow: View {
             .accessibilityLabel("Last time \(previous.reps) reps at \(weight)")
     }
 
-    /// A titled, right-aligned numeric entry column.
-    private func fieldColumn(title: String, @ViewBuilder field: () -> some View) -> some View {
+    /// A titled numeric entry column: a bordered box with –/+ step buttons
+    /// flanking a centered value, matching `.bn-numf`'s stepper affordance.
+    private func fieldColumn(
+        title: String,
+        onDecrement: @escaping () -> Void,
+        onIncrement: @escaping () -> Void,
+        @ViewBuilder field: () -> some View
+    ) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(title)
                 .font(BaneFont.mono(10))
                 .textCase(.uppercase)
                 .tracking(0.6)
                 .foregroundStyle(palette.text3)
-            field()
-                .font(BaneFont.mono(15, weight: .medium))
-                .foregroundStyle(palette.text)
-                .multilineTextAlignment(.leading)
-                .padding(.horizontal, 8)
-                .frame(height: 34)
-                .background(palette.surface3, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+            HStack(spacing: 0) {
+                stepButton(systemImage: "minus", label: "Decrease \(title)", action: onDecrement)
+                field()
+                    .font(BaneFont.mono(15, weight: .medium))
+                    .foregroundStyle(palette.text)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
+                stepButton(systemImage: "plus", label: "Increase \(title)", action: onIncrement)
+            }
+            .frame(height: 34)
+            .background(palette.surface3, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// A step button sized to fit inside ``fieldColumn``'s 34pt row rather than
+    /// the 44pt touch target `BaneNumberField` uses standalone — this row
+    /// already packs six controls (warm-up, reps, weight, RPE, plates, done).
+    private func stepButton(systemImage: String, label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(palette.text3)
+                .frame(width: 20, height: 34)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
     }
 
     /// Optional RPE picker, matching the titled column layout of reps/weight.
