@@ -32,6 +32,12 @@ struct RestTimerSheet: View {
 
     @Environment(\.banePalette) private var palette
     @State private var dragOffset: CGFloat = 0
+    /// Whether the -/+ adjust row is swapped for a direct-entry duration
+    /// field — for jumping straight to a length (e.g. 90s to 5 minutes)
+    /// rather than nudging by ``adjustSeconds`` repeatedly.
+    @State private var isEnteringExactDuration = false
+    @State private var exactDurationSeconds: Int?
+    @FocusState private var isExactDurationFieldFocused: Bool
 
     private var remaining: Int { controller.remaining(at: now) }
     private var isDone: Bool { remaining == 0 }
@@ -120,30 +126,103 @@ struct RestTimerSheet: View {
     }
 
     private var actions: some View {
-        HStack(spacing: 10) {
-            Button("\u{2212}\(Self.adjustSeconds)s") {
-                controller.extend(by: -Self.adjustSeconds)
-            }
-            .buttonStyle(.bane(.secondary, block: true))
-            .disabled(isDone)
-            .accessibilityLabel("Subtract \(Self.adjustSeconds) seconds")
+        VStack(spacing: 10) {
+            if isEnteringExactDuration {
+                exactDurationRow
+            } else {
+                HStack(spacing: 10) {
+                    Button("Reset") {
+                        controller.restart()
+                    }
+                    .buttonStyle(.bane(.secondary, block: true))
+                    .accessibilityLabel("Reset rest to \(Self.formattedDuration(controller.totalSeconds))")
 
-            Button("+\(Self.adjustSeconds)s") {
-                controller.extend(by: Self.adjustSeconds)
-            }
-            .buttonStyle(.bane(.secondary, block: true))
-            .accessibilityLabel("Add \(Self.adjustSeconds) seconds")
+                    Button("\u{2212}\(Self.adjustSeconds)s") {
+                        controller.extend(by: -Self.adjustSeconds)
+                    }
+                    .buttonStyle(.bane(.secondary, block: true))
+                    .disabled(isDone)
+                    .accessibilityLabel("Subtract \(Self.adjustSeconds) seconds")
 
-            Button(isDone ? "Done" : "Skip") {
-                if isDone {
-                    controller.stop()
-                } else {
-                    controller.skip()
+                    Button("+\(Self.adjustSeconds)s") {
+                        controller.extend(by: Self.adjustSeconds)
+                    }
+                    .buttonStyle(.bane(.secondary, block: true))
+                    .accessibilityLabel("Add \(Self.adjustSeconds) seconds")
                 }
             }
-            .buttonStyle(.bane(.primary, block: true))
-            .accessibilityLabel(isDone ? "Dismiss rest timer" : "Skip rest")
+
+            HStack(spacing: 10) {
+                keyboardToggle
+
+                Button(isDone ? "Done" : "Skip") {
+                    if isDone {
+                        controller.stop()
+                    } else {
+                        controller.skip()
+                    }
+                }
+                .buttonStyle(.bane(.primary, block: true))
+                .accessibilityLabel(isDone ? "Dismiss rest timer" : "Skip rest")
+            }
         }
+    }
+
+    private var keyboardToggle: some View {
+        Button {
+            isEnteringExactDuration.toggle()
+            if isEnteringExactDuration {
+                exactDurationSeconds = nil
+                isExactDurationFieldFocused = true
+            }
+        } label: {
+            Image(systemName: isEnteringExactDuration ? "keyboard.chevron.compact.down" : "keyboard")
+                .font(.body)
+                .frame(width: BaneButtonSize.medium.height, height: BaneButtonSize.medium.height)
+        }
+        .buttonStyle(.bane(.secondary))
+        .accessibilityLabel(isEnteringExactDuration ? "Hide exact duration entry" : "Enter exact rest duration")
+    }
+
+    private var exactDurationRow: some View {
+        HStack(spacing: 10) {
+            HStack(spacing: 6) {
+                TextField("sec", value: $exactDurationSeconds, format: .number)
+                    .keyboardType(.numberPad)
+                    .focused($isExactDurationFieldFocused)
+                    .font(BaneFont.mono(15, weight: .semibold))
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(palette.text)
+                    .onSubmit(applyExactDuration)
+                Text("sec")
+                    .baneLabel()
+                    .foregroundStyle(palette.text3)
+            }
+            .padding(.horizontal, 12)
+            .frame(height: BaneButtonSize.medium.height)
+            .frame(maxWidth: .infinity)
+            .background(palette.surface3, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+            .accessibilityLabel("Exact rest duration in seconds")
+
+            Button("Set") {
+                applyExactDuration()
+            }
+            .buttonStyle(.bane(.primary, block: true))
+            .disabled((exactDurationSeconds ?? 0) <= 0)
+            .accessibilityLabel("Set rest duration")
+        }
+    }
+
+    private func applyExactDuration() {
+        guard let exactDurationSeconds, exactDurationSeconds > 0 else { return }
+        controller.setDuration(seconds: exactDurationSeconds)
+        isEnteringExactDuration = false
+        self.exactDurationSeconds = nil
+    }
+
+    /// `M:SS` duration formatting, matching ``BaneRestRing``'s readout.
+    private static func formattedDuration(_ seconds: Int) -> String {
+        String(format: "%d:%02d", seconds / 60, seconds % 60)
     }
 }
 

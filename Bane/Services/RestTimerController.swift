@@ -93,6 +93,30 @@ final class RestTimerController {
         }
     }
 
+    /// Restarts the countdown at its current planned length (``totalSeconds``),
+    /// discarding whatever time has already elapsed — distinct from
+    /// ``skip()``, which completes the rest rather than re-running it. Also
+    /// revives a rest that already hit zero, the same way a positive
+    /// ``extend(by:)`` does.
+    func restart() {
+        guard endsAt != nil, totalSeconds > 0 else { return }
+        endsAt = Date(timeIntervalSinceNow: TimeInterval(totalSeconds))
+        hasSignalledCompletion = false
+        RestNotifications.schedule(after: TimeInterval(totalSeconds), exerciseName: exerciseName)
+    }
+
+    /// Jumps straight to an exact planned length, replacing whatever is left —
+    /// for entering a duration directly rather than nudging by
+    /// ``extend(by:)`` repeatedly (e.g. 90s to 5 minutes). Also revives a rest
+    /// that already hit zero.
+    func setDuration(seconds: Int) {
+        guard endsAt != nil, seconds > 0 else { return }
+        totalSeconds = seconds
+        endsAt = Date(timeIntervalSinceNow: TimeInterval(seconds))
+        hasSignalledCompletion = false
+        RestNotifications.schedule(after: TimeInterval(seconds), exerciseName: exerciseName)
+    }
+
     /// Skips the rest early: runs the completion routine (haptic, notification
     /// cancel, focus advance) immediately, then dismisses the countdown.
     func skip() {

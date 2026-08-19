@@ -206,6 +206,69 @@ final class WorkoutTimerTests: XCTestCase {
         XCTAssertFalse(controller.isRunning)
     }
 
+    // MARK: - Rest timer: restart and exact-duration entry
+
+    /// Restart discards elapsed time and re-arms the full planned length,
+    /// rather than completing the rest the way `skip()` does. Simulates
+    /// elapsed time by querying `remaining(at:)` with a future date, rather
+    /// than actually sleeping, to keep the test fast and deterministic.
+    func testRestartDiscardsElapsedTimeAndRearmsTotalSeconds() {
+        let controller = RestTimerController()
+        controller.start(seconds: 90, exerciseName: "Squat", exerciseID: nil)
+
+        let midway = Date(timeIntervalSinceNow: 60)
+        XCTAssertEqual(controller.remaining(at: midway), 30, accuracy: 1)
+
+        controller.restart()
+
+        XCTAssertEqual(controller.remaining(at: Date()), 90, accuracy: 1)
+        XCTAssertEqual(controller.totalSeconds, 90)
+        XCTAssertTrue(controller.isRunning)
+    }
+
+    /// Repeated negative extends can drive both the remaining time and the
+    /// planned total to zero together (``RestTimerController/totalSeconds``
+    /// tracks adjustments so progress stays proportional). At that point
+    /// there's no planned length left to restart to, so restart is correctly
+    /// a no-op — unlike `setDuration(seconds:)`, which supplies an explicit
+    /// fresh length and can still revive it.
+    func testRestartIsNoOpOnceTotalSecondsHasAlsoReachedZero() {
+        let controller = RestTimerController()
+        controller.start(seconds: 30, exerciseName: nil, exerciseID: nil)
+        controller.extend(by: -30)
+        XCTAssertEqual(controller.totalSeconds, 0)
+        XCTAssertEqual(controller.remaining(at: Date()), 0)
+
+        controller.restart()
+
+        XCTAssertEqual(controller.remaining(at: Date()), 0)
+    }
+
+    /// Exact-duration entry replaces both the remaining time and the planned
+    /// total, unlike `extend(by:)` which is additive.
+    func testSetDurationReplacesRemainingAndTotal() {
+        let controller = RestTimerController()
+        controller.start(seconds: 90, exerciseName: "Row", exerciseID: nil)
+
+        controller.setDuration(seconds: 300)
+
+        XCTAssertEqual(controller.remaining(at: Date()), 300, accuracy: 1)
+        XCTAssertEqual(controller.totalSeconds, 300)
+    }
+
+    /// Exact-duration entry can also revive a rest already sitting at zero.
+    func testSetDurationRevivesCompletedRest() {
+        let controller = RestTimerController()
+        controller.start(seconds: 10, exerciseName: nil, exerciseID: nil)
+        controller.extend(by: -10)
+        XCTAssertEqual(controller.remaining(at: Date()), 0)
+
+        controller.setDuration(seconds: 45)
+
+        XCTAssertEqual(controller.remaining(at: Date()), 45, accuracy: 1)
+        XCTAssertTrue(controller.isRunning)
+    }
+
     // MARK: - Rest timer: pause / resume
 
     /// Pausing hides the countdown (nothing is counting) and resuming restores
