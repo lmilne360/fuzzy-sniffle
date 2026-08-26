@@ -1314,27 +1314,7 @@ private struct SetRow: View {
             .accessibilityLabel(set.isWarmup ? "Warm-up set" : "Working set \(set.order + 1)")
             .accessibilityHint("Toggles warm-up")
 
-            fieldColumn(
-                title: "Reps",
-                onDecrement: { set.reps = max(0, set.reps - 1) },
-                onIncrement: { set.reps += 1 }
-            ) {
-                TextField("0", value: $set.reps, format: .number)
-                    .keyboardType(.numberPad)
-                    .focused(focusedField, equals: SetFieldFocus(setID: set.id, field: .reps))
-            }
-
-            fieldColumn(
-                title: "Weight (\(weightUnit.abbreviation))",
-                onDecrement: {
-                    set.weight = max(0, set.weight - weightUnit.toPounds(1))
-                    weightFieldOverride = weightUnit.fromPounds(set.weight)
-                },
-                onIncrement: {
-                    set.weight += weightUnit.toPounds(1)
-                    weightFieldOverride = weightUnit.fromPounds(set.weight)
-                }
-            ) {
+            fieldColumn(title: "Weight (\(weightUnit.abbreviation))") {
                 TextField("0", value: weightFieldBinding, format: .number)
                     .keyboardType(.decimalPad)
                     .focused(focusedField, equals: SetFieldFocus(setID: set.id, field: .weight))
@@ -1343,6 +1323,12 @@ private struct SetRow: View {
                             weightFieldOverride = weightUnit.fromPounds(set.weight)
                         }
                     }
+            }
+
+            fieldColumn(title: "Reps") {
+                TextField("0", value: $set.reps, format: .number)
+                    .keyboardType(.numberPad)
+                    .focused(focusedField, equals: SetFieldFocus(setID: set.id, field: .reps))
             }
 
             rpeColumn
@@ -1423,12 +1409,9 @@ private struct SetRow: View {
         )
     }
 
-    /// A titled numeric entry column: a bordered box with –/+ step buttons
-    /// flanking a centered value, matching `.bn-numf`'s stepper affordance.
+    /// A titled numeric entry column: a bordered box around a centered value.
     private func fieldColumn(
         title: String,
-        onDecrement: @escaping () -> Void,
-        onIncrement: @escaping () -> Void,
         @ViewBuilder field: () -> some View
     ) -> some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -1437,33 +1420,15 @@ private struct SetRow: View {
                 .textCase(.uppercase)
                 .tracking(0.6)
                 .foregroundStyle(palette.text3)
-            HStack(spacing: 0) {
-                stepButton(systemImage: "minus", label: "Decrease \(title)", action: onDecrement)
-                field()
-                    .font(BaneFont.mono(15, weight: .medium))
-                    .foregroundStyle(palette.text)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: .infinity)
-                stepButton(systemImage: "plus", label: "Increase \(title)", action: onIncrement)
-            }
-            .frame(height: 34)
-            .background(palette.surface3, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+            field()
+                .font(BaneFont.mono(15, weight: .medium))
+                .foregroundStyle(palette.text)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
+                .frame(height: 34)
+                .background(palette.surface3, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    /// A step button sized to fit inside ``fieldColumn``'s 34pt row rather than
-    /// the 44pt touch target `BaneNumberField` uses standalone — this row
-    /// already packs six controls (warm-up, reps, weight, RPE, plates, done).
-    private func stepButton(systemImage: String, label: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: systemImage)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(palette.text3)
-                .frame(width: 20, height: 34)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(label)
     }
 
     /// Optional RPE picker, matching the titled column layout of reps/weight.
