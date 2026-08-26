@@ -539,6 +539,7 @@ struct ActiveWorkoutView: View {
             return
         }
         restTimer.onComplete = { [weak workout] in
+            isRestSheetMinimized = true
             guard let workout,
                   let workoutExercise = workout.orderedExercises.first(where: { $0.id == exerciseID })
             else { return }
