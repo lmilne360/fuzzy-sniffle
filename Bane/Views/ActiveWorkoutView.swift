@@ -1267,6 +1267,16 @@ private struct SetRow: View {
     /// Drives the per-set plate-calculator sheet.
     @State private var isShowingPlateCalculator = false
 
+    /// The weight field's live editing value while it has focus, letting the
+    /// field go genuinely empty mid-edit. `TextField(value:format:)` bound
+    /// directly to `set.weight` (a non-optional `Double`) can't represent "no
+    /// text yet" — an empty string fails to parse, so the field re-renders
+    /// from the unchanged binding and the old number appears to pop back in
+    /// the instant the user deletes it (ba-wdd). Routing through this
+    /// optional while focused lets the field stay blank; blurring falls back
+    /// to reading `set.weight` directly, which re-seeds/commits the display.
+    @State private var weightFieldOverride: Double?
+
     @Environment(\.banePalette) private var palette
 
     var body: some View {
@@ -1316,12 +1326,23 @@ private struct SetRow: View {
 
             fieldColumn(
                 title: "Weight (\(weightUnit.abbreviation))",
-                onDecrement: { set.weight = max(0, set.weight - weightUnit.toPounds(1)) },
-                onIncrement: { set.weight += weightUnit.toPounds(1) }
+                onDecrement: {
+                    set.weight = max(0, set.weight - weightUnit.toPounds(1))
+                    weightFieldOverride = weightUnit.fromPounds(set.weight)
+                },
+                onIncrement: {
+                    set.weight += weightUnit.toPounds(1)
+                    weightFieldOverride = weightUnit.fromPounds(set.weight)
+                }
             ) {
-                TextField("0", value: $set.weight.weightDisplay(in: weightUnit), format: .number)
+                TextField("0", value: weightFieldBinding, format: .number)
                     .keyboardType(.decimalPad)
                     .focused(focusedField, equals: SetFieldFocus(setID: set.id, field: .weight))
+                    .onChange(of: isWeightFieldFocused) { _, focused in
+                        if focused {
+                            weightFieldOverride = weightUnit.fromPounds(set.weight)
+                        }
+                    }
             }
 
             rpeColumn
@@ -1379,6 +1400,27 @@ private struct SetRow: View {
             .foregroundStyle(palette.text3)
             .padding(.leading, 38)
             .accessibilityLabel("Last time \(previous.reps) reps at \(weight)")
+    }
+
+    /// Whether the weight field currently owns the keyboard.
+    private var isWeightFieldFocused: Bool {
+        focusedField.wrappedValue == SetFieldFocus(setID: set.id, field: .weight)
+    }
+
+    /// The optional-`Double` view the weight `TextField` binds to: `weightFieldOverride`
+    /// while focused (so clearing the text reads as `nil`, not a failed parse of the
+    /// old value), `set.weight` otherwise. Writes with a real value commit immediately;
+    /// a cleared field leaves `set.weight` untouched until the user types a replacement.
+    private var weightFieldBinding: Binding<Double?> {
+        Binding(
+            get: { isWeightFieldFocused ? weightFieldOverride : weightUnit.fromPounds(set.weight) },
+            set: { newValue in
+                weightFieldOverride = newValue
+                if let newValue {
+                    set.weight = weightUnit.toPounds(newValue)
+                }
+            }
+        )
     }
 
     /// A titled numeric entry column: a bordered box with –/+ step buttons
