@@ -32,6 +32,7 @@ struct ExercisePickerView: View {
     @Environment(\.banePalette) private var palette
 
     @State private var searchText = ""
+    @State private var isPresentingAdd = false
 
     /// When set, the picker becomes a swap flow keyed on this exercise: its
     /// same-muscle alternatives are surfaced up top and it is filtered out of
@@ -75,6 +76,14 @@ struct ExercisePickerView: View {
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button("Cancel") { dismiss() }
+            }
+        }
+        .sheet(isPresented: $isPresentingAdd) {
+            NavigationStack {
+                AddExerciseView(initialName: searchText) { exercise in
+                    onSelect(exercise)
+                    dismiss()
+                }
             }
         }
     }
@@ -157,7 +166,13 @@ struct ExercisePickerView: View {
                 description: Text("Add exercises from the Exercises tab first.")
             )
         } else {
-            ContentUnavailableView.search(text: searchText)
+            ContentUnavailableView {
+                Label("No Results", systemImage: "magnifyingglass")
+            } description: {
+                Text("No exercises match \"\(searchText)\".")
+            } actions: {
+                Button("Create \"\(searchText)\"") { isPresentingAdd = true }
+            }
         }
     }
 }

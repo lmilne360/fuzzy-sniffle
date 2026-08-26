@@ -9,10 +9,24 @@ struct AddExerciseView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
 
+    /// Pre-fills the name field — used when created from the exercise
+    /// picker's "no results" empty state, seeded with the search text.
+    var initialName = ""
+    /// Invoked with the newly-inserted exercise right before this view
+    /// dismisses itself, so a caller (e.g. ``ExercisePickerView``) can treat
+    /// creation the same as selecting an existing exercise.
+    var onCreate: ((Exercise) -> Void)?
+
     @State private var name = ""
     @State private var category: ExerciseCategory = .chest
     @State private var primaryMuscle: Muscle = .chest
     @State private var equipment: Equipment = .barbell
+
+    init(initialName: String = "", onCreate: ((Exercise) -> Void)? = nil) {
+        self.initialName = initialName
+        self.onCreate = onCreate
+        _name = State(initialValue: initialName)
+    }
 
     private var trimmedName: String {
         name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -66,6 +80,7 @@ struct AddExerciseView: View {
             isCustom: true
         )
         modelContext.insert(exercise)
+        onCreate?(exercise)
         dismiss()
     }
 }
