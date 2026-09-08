@@ -32,12 +32,14 @@ enum ManualWarmup {
         let warmups = workoutExercise.orderedSets.filter(\.isWarmup)
         let workingSets = workoutExercise.orderedSets.filter { !$0.isWarmup }
 
+        let seededWeight = BodyweightDefault.weight(
+            for: workoutExercise.exercise, bodyWeight: bodyWeight, fallback: 0
+        )
         let newWarmup = SetEntry(
             order: warmups.count,
-            weight: BodyweightDefault.weight(
-                for: workoutExercise.exercise, bodyWeight: bodyWeight, fallback: 0
-            ),
-            isWarmup: true
+            weight: seededWeight,
+            isWarmup: true,
+            weightIsSuggested: seededWeight > 0
         )
         newWarmup.workoutExercise = workoutExercise
         workoutExercise.sets.append(newWarmup)

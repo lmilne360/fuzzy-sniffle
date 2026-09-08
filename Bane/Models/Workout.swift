@@ -189,6 +189,13 @@ final class SetEntry {
     /// completed. Feeds the "still working out?" stale-session prompt (see
     /// ``Workout/lastLoggedSetTimestamp``).
     var completedAt: Date?
+    /// `true` while `reps` still holds an auto-suggested value (copied forward
+    /// from the last set or last session) that the user hasn't typed over.
+    /// Suggested reps display as placeholder text rather than a real value,
+    /// and clear as soon as the user edits the field (ba-jcb).
+    var repsIsSuggested: Bool = false
+    /// Same as ``repsIsSuggested``, for `weight`.
+    var weightIsSuggested: Bool = false
     /// Inverse of ``WorkoutExercise/sets``.
     var workoutExercise: WorkoutExercise?
 
@@ -199,7 +206,9 @@ final class SetEntry {
         weight: Double = 0,
         completed: Bool = false,
         isWarmup: Bool = false,
-        rpe: Double? = nil
+        rpe: Double? = nil,
+        repsIsSuggested: Bool = false,
+        weightIsSuggested: Bool = false
     ) {
         self.id = id
         self.order = order
@@ -208,5 +217,7 @@ final class SetEntry {
         self.completed = completed
         self.isWarmup = isWarmup
         self.rpe = rpe
+        self.repsIsSuggested = repsIsSuggested
+        self.weightIsSuggested = weightIsSuggested
     }
 }
