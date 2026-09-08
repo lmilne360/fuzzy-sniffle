@@ -89,7 +89,8 @@ final class BodyweightDefaultTests: XCTestCase {
     // MARK: - ManualWarmup.insert(bodyWeight:)
 
     /// A manually-added warm-up set on a bodyweight exercise seeds its weight
-    /// from the supplied body weight rather than zero.
+    /// from the supplied body weight rather than zero, flagged as a suggestion
+    /// so the UI shows it as placeholder text rather than a real value (ba-jcb).
     func testManualWarmupSeedsBodyWeightForBodyweightExercise() {
         let pushUp = makeExercise(equipment: .bodyweight)
         let workoutExercise = WorkoutExercise(order: 0, exercise: pushUp)
@@ -98,10 +99,12 @@ final class BodyweightDefaultTests: XCTestCase {
         let warmup = ManualWarmup.insert(into: workoutExercise, bodyWeight: 180)
 
         XCTAssertEqual(warmup.weight, 180)
+        XCTAssertTrue(warmup.weightIsSuggested)
     }
 
     /// The same insertion on a weighted exercise stays at zero, unaffected by
-    /// whatever body weight happens to be on hand.
+    /// whatever body weight happens to be on hand — and isn't flagged as a
+    /// suggestion, since there's nothing suggested to show.
     func testManualWarmupIgnoresBodyWeightForWeightedExercise() {
         let benchPress = makeExercise(equipment: .barbell)
         let workoutExercise = WorkoutExercise(order: 0, exercise: benchPress)
@@ -110,5 +113,6 @@ final class BodyweightDefaultTests: XCTestCase {
         let warmup = ManualWarmup.insert(into: workoutExercise, bodyWeight: 180)
 
         XCTAssertEqual(warmup.weight, 0)
+        XCTAssertFalse(warmup.weightIsSuggested)
     }
 }

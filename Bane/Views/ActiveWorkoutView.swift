@@ -606,9 +606,11 @@ struct ActiveWorkoutView: View {
         workoutExercise.workout = workout
         workout.exercises.append(workoutExercise)
 
+        let seededWeight = BodyweightDefault.weight(for: exercise, bodyWeight: currentBodyWeight, fallback: 0)
         let firstSet = SetEntry(
             order: 0,
-            weight: BodyweightDefault.weight(for: exercise, bodyWeight: currentBodyWeight, fallback: 0)
+            weight: seededWeight,
+            weightIsSuggested: seededWeight > 0
         )
         firstSet.workoutExercise = workoutExercise
         workoutExercise.sets.append(firstSet)
@@ -627,10 +629,13 @@ struct ActiveWorkoutView: View {
         let fallbackWeight = BodyweightDefault.weight(
             for: workoutExercise.exercise, bodyWeight: currentBodyWeight, fallback: 0
         )
+        let seededWeight = previous?.weight ?? fallbackWeight
         let newSet = SetEntry(
             order: workoutExercise.sets.count,
             reps: previous?.reps ?? 0,
-            weight: previous?.weight ?? fallbackWeight
+            weight: seededWeight,
+            repsIsSuggested: previous != nil,
+            weightIsSuggested: seededWeight > 0
         )
         newSet.workoutExercise = workoutExercise
         workoutExercise.sets.append(newSet)
@@ -1278,7 +1283,16 @@ private struct SetRow: View {
     /// the instant the user deletes it (ba-wdd). Routing through this
     /// optional while focused lets the field stay blank; blurring falls back
     /// to reading `set.weight` directly, which re-seeds/commits the display.
+    ///
+    /// Also backs the placeholder-style auto-fill (ba-jcb): while
+    /// `set.weightIsSuggested` is `true` this stays `nil` regardless of focus,
+    /// so the suggested number only ever shows as placeholder text, never as
+    /// a real value sitting in the field waiting to be cleared.
     @State private var weightFieldOverride: Double?
+
+    /// Reps counterpart of ``weightFieldOverride`` — same blank-while-editing
+    /// and placeholder-while-suggested behavior, for the reps field.
+    @State private var repsFieldOverride: Int?
 
     @Environment(\.banePalette) private var palette
 
@@ -1318,20 +1332,25 @@ private struct SetRow: View {
             .accessibilityHint("Toggles warm-up")
 
             fieldColumn(title: "Weight (\(weightUnit.abbreviation))") {
-                TextField("0", value: weightFieldBinding, format: .number)
+                TextField(weightPlaceholder, value: weightFieldBinding, format: .number)
                     .keyboardType(.decimalPad)
                     .focused(focusedField, equals: SetFieldFocus(setID: set.id, field: .weight))
                     .onChange(of: isWeightFieldFocused) { _, focused in
-                        if focused {
+                        if focused && !set.weightIsSuggested {
                             weightFieldOverride = weightUnit.fromPounds(set.weight)
                         }
                     }
             }
 
             fieldColumn(title: "Reps") {
-                TextField("0", value: $set.reps, format: .number)
+                TextField(repsPlaceholder, value: repsFieldBinding, format: .number)
                     .keyboardType(.numberPad)
                     .focused(focusedField, equals: SetFieldFocus(setID: set.id, field: .reps))
+                    .onChange(of: isRepsFieldFocused) { _, focused in
+                        if focused && !set.repsIsSuggested {
+                            repsFieldOverride = set.reps
+                        }
+                    }
             }
 
             rpeColumn
@@ -1396,17 +1415,63 @@ private struct SetRow: View {
         focusedField.wrappedValue == SetFieldFocus(setID: set.id, field: .weight)
     }
 
+    /// Whether the reps field currently owns the keyboard.
+    private var isRepsFieldFocused: Bool {
+        focusedField.wrappedValue == SetFieldFocus(setID: set.id, field: .reps)
+    }
+
+    /// The placeholder shown in the weight field: the suggested value while
+    /// unconfirmed (ba-jcb), else the ordinary `"0"` empty-field prompt.
+    private var weightPlaceholder: String {
+        return set.weightIsSuggested ? WeightFormat.value(set.weight, in: weightUnit) : "0"
+    }
+
+    /// The placeholder shown in the reps field, mirroring ``weightPlaceholder``.
+    private var repsPlaceholder: String {
+        return set.repsIsSuggested ? String(set.reps) : "0"
+    }
+
     /// The optional-`Double` view the weight `TextField` binds to: `weightFieldOverride`
     /// while focused (so clearing the text reads as `nil`, not a failed parse of the
     /// old value), `set.weight` otherwise. Writes with a real value commit immediately;
     /// a cleared field leaves `set.weight` untouched until the user types a replacement.
+    ///
+    /// While `set.weightIsSuggested` is `true`, this always reads `weightFieldOverride`
+    /// (nil until the user types), regardless of focus — so the suggested value shows
+    /// only as placeholder text, never as a real value in the field (ba-jcb). Typing a
+    /// value commits it to `set.weight` and clears the suggestion flag, after which the
+    /// field behaves like any other.
     private var weightFieldBinding: Binding<Double?> {
         Binding(
-            get: { isWeightFieldFocused ? weightFieldOverride : weightUnit.fromPounds(set.weight) },
+            get: {
+                set.weightIsSuggested
+                    ? weightFieldOverride
+                    : (isWeightFieldFocused ? weightFieldOverride : weightUnit.fromPounds(set.weight))
+            },
             set: { newValue in
                 weightFieldOverride = newValue
                 if let newValue {
                     set.weight = weightUnit.toPounds(newValue)
+                    set.weightIsSuggested = false
+                }
+            }
+        )
+    }
+
+    /// Reps counterpart of ``weightFieldBinding`` — same suggested-placeholder
+    /// and blank-while-editing behavior, for the reps field.
+    private var repsFieldBinding: Binding<Int?> {
+        Binding(
+            get: {
+                set.repsIsSuggested
+                    ? repsFieldOverride
+                    : (isRepsFieldFocused ? repsFieldOverride : set.reps)
+            },
+            set: { newValue in
+                repsFieldOverride = newValue
+                if let newValue {
+                    set.reps = newValue
+                    set.repsIsSuggested = false
                 }
             }
         )
