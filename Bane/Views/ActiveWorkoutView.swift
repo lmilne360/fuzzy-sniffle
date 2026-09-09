@@ -103,6 +103,95 @@ enum ExerciseSwap {
     }
 }
 
+/// Enforcing the superset-membership invariant after a grouping or roster edit.
+///
+/// Extracted from the view so `WorkoutFinish` (pruning exercises out from
+/// under a superset when the workout finishes) can reuse the exact same rule
+/// the view's own grouping edits (`supersetWithNext`, `leaveSuperset`,
+/// `remove`, `moveExercises`) already enforce, without duplicating it.
+enum Supersets {
+    /// Every group must have two or more *contiguous* members. Any run
+    /// shorter than two is dissolved back to solo exercises. Run after any
+    /// edit that can change grouping or membership (reordering, leaving,
+    /// removing an exercise).
+    static func normalize(_ workout: Workout) {
+        let ordered = workout.orderedExercises
+        var start = 0
+        while start < ordered.count {
+            guard let group = ordered[start].supersetGroup else {
+                start += 1
+                continue
+            }
+            var end = start
+            while end < ordered.count && ordered[end].supersetGroup == group {
+                end += 1
+            }
+            if end - start < 2 {
+                for i in start..<end { ordered[i].supersetGroup = nil }
+            }
+            start = end
+        }
+    }
+}
+
+/// Discarding incomplete sets (and exercises left empty by that) when a
+/// workout finishes.
+///
+/// Extracted from the view so the contract — every incomplete `SetEntry`
+/// (warm-ups included) is discarded, surviving sets renumber, and any
+/// exercise left with zero sets is removed too, same as the view's own
+/// `deleteSets(at:from:)` and `remove(_:)` — is unit-testable against
+/// SwiftData models. Both `complete(at:)` call sites (the interactive Finish
+/// button and the stale-session auto-end) share this so the prune step isn't
+/// duplicated.
+enum WorkoutFinish {
+    /// Discards every incomplete set in `workout`, then removes any exercise
+    /// left with zero sets, renumbering survivors and normalizing supersets
+    /// (an emptied exercise can leave its former partner as a lone member).
+    ///
+    /// Does nothing — and returns `false` — when `workout` has no completed
+    /// sets at all, since pruning would discard the entire workout. The
+    /// caller decides how to handle that (block with an alert, or discard the
+    /// workout outright).
+    @discardableResult
+    static func pruneIncompleteSets(in workout: Workout, context: ModelContext) -> Bool {
+        guard workout.exercises.contains(where: { $0.sets.contains(where: \.completed) }) else {
+            return false
+        }
+
+        for workoutExercise in workout.exercises {
+            let surviving = workoutExercise.sets.filter(\.completed)
+            for set in workoutExercise.sets where !set.completed {
+                context.delete(set)
+            }
+            // Reassign rather than rely on the deletion alone: `sets` is a
+            // live in-memory relationship array that won't drop a deleted
+            // entry until the context saves, and the renumbering below reads
+            // it back immediately.
+            workoutExercise.sets = surviving
+            // Compact remaining orders so future inserts stay contiguous.
+            for (index, set) in workoutExercise.orderedSets.enumerated() where set.order != index {
+                set.order = index
+            }
+        }
+
+        let surviving = workout.exercises.filter { !$0.sets.isEmpty }
+        guard surviving.count != workout.exercises.count else { return true }
+
+        for workoutExercise in workout.exercises where workoutExercise.sets.isEmpty {
+            context.delete(workoutExercise)
+        }
+        workout.exercises = surviving
+        for (index, remaining) in workout.orderedExercises.enumerated() where remaining.order != index {
+            remaining.order = index
+        }
+        // Emptying an exercise out of a superset pair may leave a lone member.
+        Supersets.normalize(workout)
+
+        return true
+    }
+}
+
 /// Identifies which field of which set currently owns the keyboard.
 ///
 /// Hoisted to `ActiveWorkoutView` rather than local to each `SetRow` so that
@@ -248,6 +337,9 @@ struct ActiveWorkoutView: View {
     @State private var isPickingExercise = false
     @State private var isConfirmingDiscard = false
     @State private var isReorderingExercises = false
+    /// Drives the blocking alert shown when Finish is tapped but no set was
+    /// ever marked complete — there's nothing to save (ba-eof).
+    @State private var isShowingNothingCompletedAlert = false
     /// The exercise the user is choosing a swap replacement for, driving the
     /// alternatives picker sheet. `nil` when no swap is in progress.
     @State private var swappingExercise: WorkoutExercise?
@@ -418,6 +510,14 @@ struct ActiveWorkoutView: View {
             } message: {
                 Text("This session has been running for a while. End it at your last logged set, or keep going.")
             }
+            .alert(
+                "Nothing Completed",
+                isPresented: $isShowingNothingCompletedAlert
+            ) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text("Mark at least one set complete before finishing, or discard this workout instead.")
+            }
             .safeAreaInset(edge: .top) {
                 WorkoutProgressHeader(workout: workout, now: now, restTimer: restTimer, onTogglePause: togglePause)
             }
@@ -583,9 +683,10 @@ struct ActiveWorkoutView: View {
 
     /// Ends a stale session at its last logged set's timestamp (falling back
     /// to when it started) rather than the moment the user happened to reopen
-    /// the app.
+    /// the app. No user is present to dismiss a blocking alert here, so a
+    /// session with nothing ever completed is discarded outright instead.
     private func endStaleWorkout() {
-        complete(at: workout.lastLoggedSetTimestamp ?? workout.startedAt ?? .now)
+        complete(at: workout.lastLoggedSetTimestamp ?? workout.startedAt ?? .now, whenEmpty: discard)
     }
 
     // MARK: - Mutations
@@ -775,28 +876,26 @@ struct ActiveWorkoutView: View {
     /// *contiguous* members. Any run shorter than two is dissolved back to solo
     /// exercises. Run after any grouping edit.
     private func normalizeSupersets() {
-        let ordered = workout.orderedExercises
-        var start = 0
-        while start < ordered.count {
-            guard let group = ordered[start].supersetGroup else {
-                start += 1
-                continue
-            }
-            var end = start
-            while end < ordered.count && ordered[end].supersetGroup == group {
-                end += 1
-            }
-            if end - start < 2 {
-                for i in start..<end { ordered[i].supersetGroup = nil }
-            }
-            start = end
-        }
+        Supersets.normalize(workout)
     }
 
-    /// Completes the session at `finishedAt`: stamps the finish time so it
-    /// moves to history, mirrors it to Apple Health (best-effort), and drops
-    /// its rest-timer controller from the registry now that the session is over.
-    private func complete(at finishedAt: Date) {
+    /// Completes the session at `finishedAt`: discards any set never marked
+    /// complete (including warm-ups) and any exercise that leaves empty,
+    /// stamps the finish time so it moves to history, mirrors it to Apple
+    /// Health (best-effort), and drops its rest-timer controller from the
+    /// registry now that the session is over.
+    ///
+    /// If nothing was ever completed, pruning would discard the whole
+    /// workout — `whenEmpty` decides what happens instead, since the two
+    /// callers need different fallbacks: the interactive Finish button blocks
+    /// with an alert (there's a user present to go back and log something),
+    /// while the stale-session auto-end has no user to show that to, so it
+    /// discards the workout outright.
+    private func complete(at finishedAt: Date, whenEmpty: () -> Void) {
+        guard WorkoutFinish.pruneIncompleteSets(in: workout, context: modelContext) else {
+            whenEmpty()
+            return
+        }
         workout.finishedAt = finishedAt
         #if canImport(HealthKit)
         let finished = workout
@@ -806,9 +905,11 @@ struct ActiveWorkoutView: View {
         dismiss()
     }
 
-    /// Completes the session now — the ordinary "Finish" action.
+    /// Completes the session now — the ordinary "Finish" action. Blocks with
+    /// an alert if nothing was ever marked complete, rather than saving (or
+    /// discarding) on the user's behalf.
     private func finish() {
-        complete(at: .now)
+        complete(at: .now) { isShowingNothingCompletedAlert = true }
     }
 
     /// Abandons the session, deleting the workout and its cascade of children,
