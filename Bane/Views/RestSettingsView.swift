@@ -12,17 +12,17 @@ enum RestPreferences {
     /// The out-of-box warm-up rest length — shorter, as warm-ups rest less.
     static let fallbackWarmupSeconds = 60
 
-    /// The rest countdown for a completed set. A per-exercise override wins over
-    /// everything; otherwise warm-up sets rest for `warmupDefault` and working
-    /// sets for `workingDefault`.
+    /// The rest countdown for a completed set. Warm-up sets always rest for
+    /// `warmupDefault`, regardless of any per-exercise override; otherwise a
+    /// per-exercise override wins, falling back to `workingDefault`.
     static func restDuration(
         isWarmup: Bool,
         exerciseOverride: Int?,
         workingDefault: Int,
         warmupDefault: Int
     ) -> Int {
-        if let exerciseOverride { return exerciseOverride }
-        return isWarmup ? warmupDefault : workingDefault
+        if isWarmup { return warmupDefault }
+        return exerciseOverride ?? workingDefault
     }
 }
 

@@ -103,14 +103,15 @@ final class ManualWarmupRestTests: XCTestCase {
         )
     }
 
-    /// (3) A per-exercise override wins over both defaults, warm-up or not.
-    func testExerciseOverrideWinsOverBothDefaults() {
+    /// (3) A per-exercise override wins for working sets, but warm-up sets
+    /// always use the warm-up default regardless of the override.
+    func testWarmupDefaultWinsOverExerciseOverride() {
         XCTAssertEqual(
             RestPreferences.restDuration(
                 isWarmup: true, exerciseOverride: 120,
                 workingDefault: 90, warmupDefault: 60
             ),
-            120
+            60
         )
         XCTAssertEqual(
             RestPreferences.restDuration(
