@@ -109,6 +109,53 @@ final class ProgressiveOverloadTests: XCTestCase {
         ])
     }
 
+    /// A stale 0 previous weight (bodyweight exercise, unfilled set, etc.) must
+    /// not permanently override a nonzero configured plan weight — the weight
+    /// bump on a top-of-range session should build from the fallback target's
+    /// weight instead of `0 + increment` (ba-8v7).
+    func testZeroPreviousWeightAtMaxFallsBackToConfiguredWeight() {
+        let result = ProgressiveOverload.nextTargets(
+            previousWorkingSets: previous([(12, 0), (12, 100)]),
+            min: 8, max: 12, increment: 5,
+            fallback: fallback
+        )
+
+        XCTAssertEqual(result, [
+            ProgressiveOverload.SetTarget(reps: 8, weight: 105),
+            ProgressiveOverload.SetTarget(reps: 8, weight: 105),
+        ])
+    }
+
+    /// Same fallback rule on the "hold" branch: a below-min set with a stale 0
+    /// weight holds at the fallback's configured weight, not 0 (ba-8v7).
+    func testZeroPreviousWeightBelowMinFallsBackToConfiguredWeight() {
+        let result = ProgressiveOverload.nextTargets(
+            previousWorkingSets: previous([(6, 0), (9, 100)]),
+            min: 8, max: 12, increment: 5,
+            fallback: fallback
+        )
+
+        XCTAssertEqual(result, [
+            ProgressiveOverload.SetTarget(reps: 8, weight: 100),
+            ProgressiveOverload.SetTarget(reps: 8, weight: 100),
+        ])
+    }
+
+    /// Same fallback rule on the mid-range branch: a stale 0 weight builds the
+    /// next target from the fallback's configured weight, not 0 (ba-8v7).
+    func testZeroPreviousWeightMidRangeFallsBackToConfiguredWeight() {
+        let result = ProgressiveOverload.nextTargets(
+            previousWorkingSets: previous([(9, 0), (10, 100)]),
+            min: 8, max: 12, increment: 5,
+            fallback: fallback
+        )
+
+        XCTAssertEqual(result, [
+            ProgressiveOverload.SetTarget(reps: 10, weight: 100),
+            ProgressiveOverload.SetTarget(reps: 11, weight: 100),
+        ])
+    }
+
     // MARK: - Integration through SwiftData
 
     private func makeContext() -> ModelContext {

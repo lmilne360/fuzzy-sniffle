@@ -63,17 +63,21 @@ enum ProgressiveOverload {
         let allReachedMax = previousWorkingSets.allSatisfy { $0.reps >= high }
         let anyBelowMin = previousWorkingSets.contains { $0.reps < low }
 
-        return previousWorkingSets.map { set in
+        return previousWorkingSets.enumerated().map { index, set in
+            // A previous weight of 0 (bodyweight exercise, unfilled set, etc.) is
+            // not usable load data — fall back to that set's own configured
+            // target weight instead of permanently carrying forward a stale 0.
+            let baseWeight = set.weight > 0 ? set.weight : (index < fallback.count ? fallback[index].weight : set.weight)
             if allReachedMax {
                 // Whole range cleared → bump the load, restart at the bottom.
-                return SetTarget(reps: low, weight: set.weight + increment)
+                return SetTarget(reps: low, weight: baseWeight + increment)
             }
             if anyBelowMin {
                 // Still under the floor somewhere → hold load, aim for the floor.
-                return SetTarget(reps: low, weight: set.weight)
+                return SetTarget(reps: low, weight: baseWeight)
             }
             // Mid-range → keep the load, add a rep toward the top.
-            return SetTarget(reps: Swift.min(set.reps + 1, high), weight: set.weight)
+            return SetTarget(reps: Swift.min(set.reps + 1, high), weight: baseWeight)
         }
     }
 }
