@@ -259,4 +259,23 @@ final class ProgressiveOverloadTests: XCTestCase {
         XCTAssertEqual(sets.map(\.reps), [8])
         XCTAssertEqual(sets.map(\.weight), [95])
     }
+
+    /// Sets built from a routine's configured (nonzero) targets are flagged as
+    /// suggested so they render as placeholder text rather than committed
+    /// values; a target left unconfigured (0/0) is not (ba-0u6).
+    @MainActor
+    func testFromRoutineMarksConfiguredTargetsAsSuggested() throws {
+        let context = makeContext()
+        let deadlift = Exercise(name: "Deadlift", category: .back, primaryMuscle: .lats, equipment: .barbell)
+        context.insert(deadlift)
+        let routine = makeRoutine(in: context, exercise: deadlift, progressive: false,
+                                   starting: [(8, 135), (0, 0)])
+        try context.save()
+
+        let workout = Workout.from(routine: routine)
+        let sets = try XCTUnwrap(workout.orderedExercises.first).orderedSets
+
+        XCTAssertEqual(sets.map(\.repsIsSuggested), [true, false])
+        XCTAssertEqual(sets.map(\.weightIsSuggested), [true, false])
+    }
 }

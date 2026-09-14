@@ -736,7 +736,7 @@ struct ActiveWorkoutView: View {
             reps: previous?.reps ?? 0,
             weight: seededWeight,
             repsIsSuggested: previous != nil,
-            weightIsSuggested: seededWeight > 0
+            weightIsSuggested: previous != nil
         )
         newSet.workoutExercise = workoutExercise
         workoutExercise.sets.append(newSet)
