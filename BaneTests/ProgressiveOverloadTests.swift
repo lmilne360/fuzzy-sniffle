@@ -177,6 +177,8 @@ final class ProgressiveOverloadTests: XCTestCase {
 
         XCTAssertEqual(sets.map(\.reps), [8, 8])
         XCTAssertEqual(sets.map(\.weight), [105, 105])
+        XCTAssertEqual(sets.map(\.repsIsSuggested), [true, true])
+        XCTAssertEqual(sets.map(\.weightIsSuggested), [true, true])
     }
 
     /// A mid-range prior session adds a rep at the same weight, and warm-up sets
@@ -197,6 +199,8 @@ final class ProgressiveOverloadTests: XCTestCase {
 
         XCTAssertEqual(sets.map(\.reps), [11])
         XCTAssertEqual(sets.map(\.weight), [200])
+        XCTAssertEqual(sets.map(\.repsIsSuggested), [true])
+        XCTAssertEqual(sets.map(\.weightIsSuggested), [true])
     }
 
     /// The most recent finished session wins when history has several.
@@ -219,6 +223,28 @@ final class ProgressiveOverloadTests: XCTestCase {
         // Most recent was mid-range at 140 → +1 rep, same weight.
         XCTAssertEqual(sets.map(\.reps), [10])
         XCTAssertEqual(sets.map(\.weight), [140])
+        XCTAssertEqual(sets.map(\.repsIsSuggested), [true])
+        XCTAssertEqual(sets.map(\.weightIsSuggested), [true])
+    }
+
+    /// A plan whose configured weight was left at 0 (never set by its author)
+    /// still marks the seeded set as suggested through the real "Start" path —
+    /// the `> 0` gate previously suppressed this exact case (ba-jno).
+    @MainActor
+    func testFromProgressiveMarksZeroConfiguredWeightAsSuggested() throws {
+        let context = makeContext()
+        let pullUp = Exercise(name: "Pull-Up", category: .back, primaryMuscle: .lats, equipment: .bodyweight)
+        context.insert(pullUp)
+        let routine = makeRoutine(in: context, exercise: pullUp, progressive: true,
+                                  starting: [(10, 0)])
+        try context.save()
+
+        let workout = Workout.fromProgressive(routine: routine, in: context)
+        let sets = try XCTUnwrap(workout.orderedExercises.first).orderedSets
+
+        XCTAssertEqual(sets.map(\.weight), [0])
+        XCTAssertEqual(sets.map(\.repsIsSuggested), [true])
+        XCTAssertEqual(sets.map(\.weightIsSuggested), [true])
     }
 
     /// With no finished history, progressive mode falls back to the routine's
@@ -237,6 +263,8 @@ final class ProgressiveOverloadTests: XCTestCase {
 
         XCTAssertEqual(sets.map(\.reps), [10, 10])
         XCTAssertEqual(sets.map(\.weight), [30, 30])
+        XCTAssertEqual(sets.map(\.repsIsSuggested), [true, true])
+        XCTAssertEqual(sets.map(\.weightIsSuggested), [true, true])
     }
 
     /// With the mode disabled, prior history is ignored entirely — the workout
@@ -258,11 +286,14 @@ final class ProgressiveOverloadTests: XCTestCase {
 
         XCTAssertEqual(sets.map(\.reps), [8])
         XCTAssertEqual(sets.map(\.weight), [95])
+        XCTAssertEqual(sets.map(\.repsIsSuggested), [true])
+        XCTAssertEqual(sets.map(\.weightIsSuggested), [true])
     }
 
-    /// Sets built from a routine's configured (nonzero) targets are flagged as
-    /// suggested so they render as placeholder text rather than committed
-    /// values; a target left unconfigured (0/0) is not (ba-0u6).
+    /// Sets built from a routine's targets are always flagged as suggested, so
+    /// they render as placeholder text rather than committed values — even a
+    /// target the plan's author left unconfigured (0/0) is still a defined
+    /// source, unlike the "no source at all" case gated elsewhere (ba-jno).
     @MainActor
     func testFromRoutineMarksConfiguredTargetsAsSuggested() throws {
         let context = makeContext()
@@ -275,7 +306,7 @@ final class ProgressiveOverloadTests: XCTestCase {
         let workout = Workout.from(routine: routine)
         let sets = try XCTUnwrap(workout.orderedExercises.first).orderedSets
 
-        XCTAssertEqual(sets.map(\.repsIsSuggested), [true, false])
-        XCTAssertEqual(sets.map(\.weightIsSuggested), [true, false])
+        XCTAssertEqual(sets.map(\.repsIsSuggested), [true, true])
+        XCTAssertEqual(sets.map(\.weightIsSuggested), [true, true])
     }
 }

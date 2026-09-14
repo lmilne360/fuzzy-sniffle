@@ -79,8 +79,8 @@ extension Workout {
                     order: setOrder,
                     reps: target.reps,
                     weight: target.weight,
-                    repsIsSuggested: target.reps > 0,
-                    weightIsSuggested: target.weight > 0
+                    repsIsSuggested: true,
+                    weightIsSuggested: true
                 )
                 set.workoutExercise = workoutExercise
                 workoutExercise.sets.append(set)
